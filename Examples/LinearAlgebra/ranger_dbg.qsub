@@ -1,0 +1,26 @@
+#!/bin/bash                           
+# Which account to be charged cpu time
+#$ -A UTMDACC-DIP                     
+#  combine stdout stderr              
+#$ -j y                               
+#  jobname                            
+#$ -N dbg                              
+#  inherit submission env             
+#$ -V                                 
+# The job is located in the current   
+# working directory.                  
+#$ -cwd                             
+
+#$ -o $JOB_NAME.o$JOB_ID            
+#$ -q development                   
+#$ -pe 1way 16
+#$ -l h_rt=01:00:00                 
+set -x                              
+echo $MPIRUN_RANK
+echo $MPIRUN_NPROCS
+echo $MPIRUN_ID
+echo $MPIRUN_HOST
+echo $MPIRUN_PORT
+sleep 30
+ibrun -n 1 -o 0 ./matmatmult -nsize 5000 -log_summary
+while [ 1 ] ; do sleep 5 ; done

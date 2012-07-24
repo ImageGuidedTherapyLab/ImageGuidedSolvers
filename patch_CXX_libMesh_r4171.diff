@@ -1,0 +1,64 @@
+Index: include/solvers/petsc_diff_solver.h
+===================================================================
+--- include/solvers/petsc_diff_solver.h	(revision 4171)
++++ include/solvers/petsc_diff_solver.h	(working copy)
+@@ -93,6 +93,10 @@
+    */
+   virtual unsigned int solve ();
+ 
++  /**
++   * Returns the raw PETSc snes context pointer.
++   */
++  SNES snes() { return _snes; }
+ protected:
+ 
+   /**
+Index: src/solvers/petsc_diff_solver.C
+===================================================================
+--- src/solvers/petsc_diff_solver.C	(revision 4171)
++++ src/solvers/petsc_diff_solver.C	(working copy)
+@@ -271,7 +271,7 @@
+ #else
+ 
+   ierr = SNESSolve (_snes, PETSC_NULL, x.vec());
+-         CHKERRABORT(libMesh::COMM_WORLD,ierr);
++         CHKERRQ(ierr);
+ 
+ #endif
+ 
+Index: Makefile.const
+===================================================================
+--- Makefile.const	(revision 4171)
++++ Makefile.const	(working copy)
+@@ -9,6 +9,9 @@
+ 
+ # include the library options determined by configure
+ include Make.common
++unwanted_itk_flags=-ansi -pedantic -D_GLIBCXX_DEBUG -D_GLIBCXX_DEBUG_PEDANTIC
++libmesh_CXXFLAGS := $(filter-out $(unwanted_itk_flags),$(libmesh_CXXFLAGS))
++libmesh_CXXFLAGS += -DMPICH_SKIP_MPICXX
+ 
+ 
+ ###############################################################################
+Index: Make.common.in
+===================================================================
+--- Make.common.in	(revision 4171)
++++ Make.common.in	(working copy)
+@@ -255,7 +255,7 @@
+ ###############################################################################
+ # The mesh library
+ #
+-mesh_library_dir := $(libmesh_dir)/lib/$(hosttype)_$(METHOD)
++mesh_library_dir := $(libmesh_dir)/lib/$(PETSC_ARCH)
+ 
+ mesh_library     := $(mesh_library_dir)/libmesh$(static_libext)
+ ifeq ($(enable-shared),yes) 
+@@ -294,7 +294,7 @@
+ 
+ #
+ # Contributed source & libraries
+-EXTERNAL_LIBDIR := $(libmesh_dir)/contrib/lib/$(hosttype)_$(METHOD)
++EXTERNAL_LIBDIR := $(libmesh_dir)/contrib/lib/$(PETSC_ARCH)
+ ifeq ($(enable-shared),yes) 
+   libmesh_DLFLAGS += $(libmesh_RPATHFLAG)$(EXTERNAL_LIBDIR)
+ endif

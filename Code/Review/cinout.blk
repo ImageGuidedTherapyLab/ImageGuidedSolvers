@@ -1,0 +1,19 @@
+!
+      integer NIN,NOUT,NDUMP,NPROFB,NHIST,NCONTR,NWE, &
+              KIN,LIN,LTERM,LTERM1
+      common /cinout/ NIN,NOUT,NDUMP,NPROFB,NHIST,NCONTR
+      common /cinou0/ NWE,KIN
+      common /cdebug/ LIN,LTERM,LTERM1
+!
+!     NIN     - standard input
+!     NOUT    - standard output
+!     NDUMP   - dump file
+!     NPROFB  - a file containing data for drawing a body profile
+!     NHIST   - a file containing a history of refinements
+!     NCONTR  - a file containing control parameters
+!
+!     NWE     - a file with modified input for GMP 
+!
+!     LIN     - standard input file for the debugger
+!     LTERM   - standard terminal (in)
+!     LTERM1  - standard terminal (out)

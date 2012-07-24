@@ -1,0 +1,51 @@
+# very important to include all cxx flags from each library
+
+LIBMESH_CXXFLAGS=`$(LIBMESH_DIR)/contrib/bin/libmesh-config --cxxflags` 
+LIBMESH_INCLUDE=`$(LIBMESH_DIR)/contrib/bin/libmesh-config --include`
+LIBMESH_LIB=`$(LIBMESH_DIR)/contrib/bin/libmesh-config --ldflags`
+libMeshHostType = x86_64-unknown-linux-gnu
+
+# Build an example ITK project with 
+#    SET(CMAKE_VERBOSE_MAKEFILE ON)
+# to get a list of the following includes and library links
+# list of all ITK INCLUDE/include/InsightToolkitS
+# find  $(ITK_HOME)/include/InsightToolkit -type d 
+ITK_CXXFLAGS=-ftemplate-depth-50 
+# taken from cmake with verbose makefile
+ITK_INCLUDE= -I$(ITK_HOME)/include/InsightToolkit/gdcm/src \
+             -I$(ITK_HOME)/include/InsightToolkit/gdcm \
+             -I$(ITK_HOME)/include/InsightToolkit/Utilities \
+             -I$(ITK_HOME)/include/InsightToolkit/Utilities/vxl/core \
+             -I$(ITK_HOME)/include/InsightToolkit/Utilities/vxl/vcl \
+             -I$(ITK_HOME)/include/InsightToolkit/Utilities/vxl/v3p/netlib \
+             -I$(ITK_HOME)/include/InsightToolkit/Utilities/itkExtHdrs \
+             -I$(ITK_HOME)/include/InsightToolkit/Utilities/nifti/znzlib \
+             -I$(ITK_HOME)/include/InsightToolkit/Utilities/nifti/niftilib \
+             -I$(ITK_HOME)/include/InsightToolkit/Utilities/expat \
+             -I$(ITK_HOME)/include/InsightToolkit/Utilities/DICOMParser \
+             -I$(ITK_HOME)/include/InsightToolkit/Utilities/NrrdIO \
+             -I$(ITK_HOME)/include/InsightToolkit/Utilities/MetaIO \
+             -I$(ITK_HOME)/include/InsightToolkit/SpatialObject \
+             -I$(ITK_HOME)/include/InsightToolkit/Numerics/NeuralNetworks \
+             -I$(ITK_HOME)/include/InsightToolkit/Numerics/Statistics \
+             -I$(ITK_HOME)/include/InsightToolkit/Numerics/FEM \
+             -I$(ITK_HOME)/include/InsightToolkit/IO \
+             -I$(ITK_HOME)/include/InsightToolkit/Numerics \
+             -I$(ITK_HOME)/include/InsightToolkit/Common \
+             -I$(ITK_HOME)/include/InsightToolkit/BasicFilters \
+             -I$(ITK_HOME)/include/InsightToolkit/Algorithms \
+             -I$(ITK_HOME)/include/InsightToolkit  
+############ BE WARY OF ITK_LIB cause memory leak before
+############      b/c of improper link?
+############  keep ITK_LIB minimal an let petsc handle system libraries...
+ITK_LIB= -L$(ITK_DIR) -Wl,-rpath,$(ITK_DIR) -lITKFEM -lITKIO -lITKStatistics -lITKNumerics -lITKBasicFilters -lITKNrrdIO -litkgdcm -litkjpeg12 -litkjpeg16 -litkopenjpeg -litkpng -litktiff -litkjpeg8 -lITKSpatialObject -lITKMetaIO -lITKDICOMParser -lITKEXPAT -lITKniftiio -lITKznz -litkzlib -lITKCommon -litkNetlibSlatec -litkvnl_inst -litkvnl_algo -litkv3p_netlib -litkv3p_lsqr -litkvnl -litkvcl -litksys 
+
+INCLUDE= $(PETSC_INCLUDE) $(TAO_INCLUDE) $(LIBMESH_INCLUDE) $(ITK_INCLUDE) -ICode/Common -ICode/TreatmentPlanning -ICode/ModelAssistedMonitoring 
+
+
+
+# all libraries to link with
+#USER_LIB= ${PETSC_SNES_LIB} ${TAO_LIB} ${LIBMESH_LIB} ${ITK_LIB}  
+PDE_LIB= ${ITK_LIB} ${TAO_LIB} -Wl,-rpath,$(TAO_DIR)/lib/$(PETSC_ARCH) -L/usr/lib -Wl,-rpath,/usr/lib ${LIBMESH_LIB} 
+IMG_LIB= ${ITK_LIB}  ${PETSC_DM_LIB} ${PETSC_TS_LIB} ${LIBMESH_LIB} 
+

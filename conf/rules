@@ -1,0 +1,252 @@
+#GNU make offers something called pattern rules, which are even better 
+#than suffix rules. A pattern rule uses a percent sign to mean "any string."
+#So C source files would be compiled using a rule like the following: 	
+#		
+#	%.o: %.c
+#        gcc -c -o $@ $ (CFLAGS) $< 	
+#		
+#    Here the output file %.o comes first, and the prerequisite %.c comes 
+#  after a colon. In short, a pattern rule is just like a regular dependency
+#  line, but it contains percent signs instead of exact filenames. 	
+#    We see the $< string to refer to the prerequisite, but we also see $@,
+#  which refers to the output file. So the name of the .o file is plugged 
+#  in there. Both of these are built-in macros; make defines them every 
+#  time it executes an entry.
+
+# '$<'  <==> name of prereq
+# '$@'  <==> name of target
+
+# Compile .f90 files
+$(obj_path)/%$(dot_o): %.f90
+	@echo Compiling $<
+	$(FC) $(FC_FLAGS) $(PREC_FLAGS) $(INCLUDE) -o $@ -c $< 
+
+# Compile .c files
+$(obj_path)/%$(dot_o): %.c
+	@echo Compiling $<
+	$(PCC) $(PCC_FLAGS) $(PREC_FLAGS) $(INCLUDE) -o $@ -c $<
+ 
+#                    | used for openmp #######NOTE###### -openmp option
+#  Compile .FPP files| places static arrays in stack: use save attribute
+#                    | if seg fault on stack
+$(obj_path)/%$(dot_o): %.FPP
+	@echo Compiling $<
+	$(FC) $(FC_FLAGS) $(PREC_FLAGS) $(INCLUDE) -o $@ -c $<
+#	$(FC) $(FC_FLAGS) -openmp $(PREC_FLAGS) $(INCLUDE) -o $@ -c $<
+
+# Compile .cxx files
+$(obj_path)/%$(dot_o): %.cxx
+	@echo Compiling $<
+	$(PCC) $(PREC_FLAGS) $(PCC_FLAGS) $(LIBMESH_CXXFLAGS) $(INCLUDE) -o $@ -c $<
+
+
+# for preprocessor
+objf90_fem   :=  $(notdir $(filter %$(dot_o),$(SOURCE_ALL:.f90=$(dot_o))))
+objcxx_fem   :=  $(notdir $(filter %$(dot_o),$(SOURCE_ALL:.cxx=$(dot_o))))
+objcxx_exmple:=  $(notdir $(filter %$(dot_o),$(SOURCE_EXAMPLE:.cxx=$(dot_o))))
+OBJECT_ALL   := $(addprefix $(obj_path)/, $(objcxx_fem) $(objf90_fem ) $(objcxx_exmple) ) 
+
+#==================================================================
+# auto dependencies magic
+dep_files = $(patsubst %$(dot_o),%.P,$(OBJECT_ALL))
+
+#$(patsubst pattern,replacement,text)
+#    Finds whitespace-separated words in text that match pattern and replaces them with replacement. Here pattern may contain a `%' which acts as a wildcard, matching any number of any characters within a word. If replacement also contains a `%', the `%' is replaced by the text that matched the `%' in pattern. Only the first `%' in the pattern and replacement is treated this way; any subsequent `%' is unchanged.
+#    `%' characters in patsubst function invocations can be quoted with preceding backslashes (`\'). Backslashes that would otherwise quote `%' characters can be quoted with more backslashes. Backslashes that quote `%' characters or other backslashes are removed from the pattern before it is compared file names or has a stem substituted into it. Backslashes that are not in danger of quoting `%' characters go unmolested. For example, the pattern `the\%weird\\%pattern\\' has `the%weird\' preceding the operative `%' character, and `pattern\\' following it. The final two backslashes are left alone because they cannot affect any `%' character.
+#    Whitespace between words is folded into single space characters; leading and trailing whitespace is discarded.
+#    For example,
+#$(patsubst %.c,%.o,x.c.c bar.c)
+#
+#    produces the value `x.c.o bar.o'.
+
+
+# the following include depends on the $(dep_files) with depends on a dummy file
+# which means that the preprocessing stuff will always be run
+# One file can be the target of several rules. All the prerequisites mentioned in all the rules are merged into one list of prerequisites for the target. If the target is older than any prerequisite from any rule, the commands are executed.
+#
+# There can only be one set of commands to be executed for a file. If more than one rule gives commands for the same file, make uses the last set given and prints an error message. (As a special case, if the file's name begins with a dot, no error message is printed. This odd behavior is only for compatibility with other implementations of make... you should avoid using it).
+# dont build dependencies for documentation
+ifeq ($(DEPENDENCY),1)
+# the hash '-' in front of the include tells  make not to stop if the
+# include fails.
+-include $(dep_files)
+endif
+$(dep_files): $(obj_path)/.dummy
+
+FIX_P = ( echo -n $@ $(obj_path)/ ; cat $@-tmp ) > $@
+
+# '$<'  <==> name of prereq
+# '$@'  <==> name of target
+$(obj_path)/%.P: %.F
+	@echo mkdeps $< '>' $@
+	@sed \
+	    -e '/^[^#]/d' \
+	    -e '/.*\\ *$$/s/\\* *$$//' \
+	    -e '/\/\*/s/\/\*.*//' \
+	    -e "s/'//g" \
+	    -e 's/`//g' \
+		  		$<  > $(*F)-sed.c
+	@($(CC) -MM $(PREC_FLAGS) $(INCLUDE) $(*F)-sed.c > $@-tmp) 
+	@echo $@ " " \\ > $@
+	@sed \
+	      -e 's,$(*F)-sed\.o,$$\(obj_path\)/$(*F)$(dot_o),g' \
+	      -e 's,$(*F)-sed.c,$(*F).F,g' \
+	      -e 's,$(*F)-sed:,$$\(obj_path\)/$(*F)$(dot_o):,g' \
+	      -e 's,$(*F)-sed$$,$(*F).F,g' \
+	   $@-tmp >> $@
+	@rm -f $(*F)-sed.c $@-tmp 
+
+$(obj_path)/%.P: %.FPP
+	@echo mkdeps $< '>' $@
+	@sed \
+	    -e '/^[^#]/d' \
+	    -e '/.*\\ *$$/s/\\* *$$//' \
+	    -e '/\/\*/s/\/\*.*//' \
+	    -e "s/'//g" \
+	    -e 's/`//g' \
+		  		$<  > $(*F)-sed.c
+	@($(CC) -MM $(PREC_FLAGS) $(INCLUDE) $(*F)-sed.c > $@-tmp) 
+	@echo $@ " " \\ > $@
+	@sed \
+	      -e 's,$(*F)-sed\.o,$$\(obj_path\)/$(*F)$(dot_o),g' \
+	      -e 's,$(*F)-sed.c,$(*F).FPP,g' \
+	      -e 's,$(*F)-sed:,$$\(obj_path\)/$(*F)$(dot_o):,g' \
+	      -e 's,$(*F)-sed$$,$(*F).FPP,g' \
+	   $@-tmp >> $@
+	@rm -f $(*F)-sed.c $@-tmp 
+
+$(obj_path)/%.P: %.c
+	@echo mkdeps $< '>' $@
+	@sed \
+	    -e '/^[^#]/d' \
+	    -e '/.*\\ *$$/s/\\* *$$//' \
+	    -e '/\/\*/s/\/\*.*//' \
+	    -e "s/'//g" \
+	    -e 's/`//g' \
+		  		$<  > $(*F)-sed.c
+	@($(CXX) -MM $(PREC_FLAGS) $(INCLUDE) $(*F)-sed.c > $@-tmp) 
+	@echo $@ " " \\ > $@
+	@sed \
+	      -e 's,$(*F)-sed\.o,$$\(obj_path\)/$(*F)$(dot_o),g' \
+	      -e 's,$(*F)-sed.c,$(*F).c,g' \
+	      -e 's,$(*F)-sed:,$$\(obj_path\)/$(*F)$(dot_o):,g' \
+	      -e 's,$(*F)-sed$$,$(*F).c,g' \
+	   $@-tmp >> $@
+	@rm -f $(*F)-sed.c $@-tmp 
+
+$(obj_path)/%.P: %.cxx
+	@echo mkdeps $< '>' $@
+	@sed \
+	    -e '/^[^#]/d' \
+	    -e '/.*\\ *$$/s/\\* *$$//' \
+	    -e '/\/\*/s/\/\*.*//' \
+	    -e "s/'//g" \
+	    -e 's/`//g' \
+		  		$<  > $(*F)-sed.c
+	@($(CXX) -MM $(LIBMESH_CXXFLAGS) $(PREC_FLAGS) $(INCLUDE) $(*F)-sed.c > $@-tmp) 
+	@echo $@ " " \\ > $@
+	@sed \
+	      -e 's,$(*F)-sed\.o,$$\(obj_path\)/$(*F)$(dot_o),g' \
+	      -e 's,$(*F)-sed.c,$(*F).cxx,g' \
+	      -e 's,$(*F)-sed:,$$\(obj_path\)/$(*F)$(dot_o):,g' \
+	      -e 's,$(*F)-sed$$,$(*F).cxx,g' \
+	   $@-tmp >> $@
+	@rm -f $(*F)-sed.c $@-tmp 
+
+list:
+	@echo LIST OF SOURCE FILES:
+	@echo $(SOURCE_ALL)
+	@echo
+	@echo LIST OF SOURCE PATHS SEARCHED IN:
+	@echo $(VPATH)
+	@echo
+	@echo LIST OF DIRECTORIES SEARCHED FOR INCLUDES:
+	@echo $(INCLUDES)
+	@echo
+	@echo PREPROCESSOR AND COMPILER OPTIONS:
+	@echo $(PREC_FLAGS)
+	@echo
+	@echo $(FFLAGS)
+	@echo
+
+clean_main:
+	@echo $(MAKECMDGOALS)
+	rm -f Code/*.o 
+
+dfclean:
+	rm -f ${WORK}/exec/$(EXEC) $(obj_path)/*.mod $(obj_path)/*.P $(obj_path)/*.o 
+
+
+# DEPRECATED
+#======================================================================
+#export magic
+#SRC_DIR set in  dot files as global variables
+exp_path = ./export_$(C)
+exp_dirs = $(addprefix $(exp_path)/,$(sort $(dir $(SOURCE_ALL) \
+		$(addprefix $(SRC_DIR)/,$(BLK_EXP) $(OTHER_FILES)))))
+export:
+	rm -rf $(exp_path)
+	mkdir $(exp_path)
+	for d in $(exp_dirs) ; do mkdir $$d ; done
+	for f in $(SOURCE_ALL) $(BLK_EXP) ; do echo $(exp_path)/$$f ;\
+	  (tclsh prep.tcl $(COMPLEX) $(EM) $(MAXEQNS) \
+                            < $$f > $(exp_path)/$$f); \
+	  done
+	for f in $(OTHER_FILES) ; do echo $(exp_path)/$$f ;\
+	  cp $$f $(exp_path)/$$f ; done
+	tar -xzf $(TAR_NAME)_$(C).tgz $(exp_path)
+
+# Ftof_FILES	:= $(patsubst %.F,%.f,$(wildcard */*.F))
+
+# Preprocess
+#prec: $(Ftof_FILES)
+#	cp $(SRC_DIR)/commons/$(SYSCOM) $(SRC_DIR)/commons/syscom.blk
+#
+# Preprocess .F to create .f
+#.F.f:
+#	$(FPP) $(PREC_FLAGS) $< > $@
+
+# tar or tar/gzip
+
+tar: 
+	@tar -cvf $(TAR_NAME).tar $(TAR_FILES) $(OTHER_FILES)
+tgz: 
+	@tar -czvf $(TAR_NAME).tgz $(TAR_FILES) $(OTHER_FILES) 
+
+realclean:
+	@rm -rf _obj_* exec export* $(TAR_NAME)*
+#   these are hidden files created by editors and cvs conflicts
+	@rm -f .\#* */.\#* */*/.\#* \#*\# */\#*\# */*/\#*\# *~ */*~ */*/*~
+
+
+pdeopt: $(obj_path)/.dummy $(WORK)/exec/.dummy $(OBJECT_FEM) $(obj_path)/modelAssistedMonitoring.o 
+	@echo
+	@echo Linking exec/$(EXEC)
+	@echo ----------------------
+	$(CLINKER) $(LIBMESH_CXXFLAGS) -o $(WORK)/exec/$(EXEC) $(obj_path)/modelAssistedMonitoring.o $(OBJECT_FEM)  $(PDE_LIB)
+
+iter: Examples/IterativeReconstruction/signalmodel.so
+	python setup.py build_ext --build-lib=Examples/IterativeReconstruction/
+
+utilphase: utilities/VerifyPhase.cxx 
+	$(PCC) $(PREC_FLAGS) $(PCC_FLAGS) $(ITK_CXXFLAGS) $(LIBMESH_CXXFLAGS) $(INCLUDE) -o utilities/VerifyPhase.o -c $<
+	$(CLINKER) $(ITK_CXXFLAGS) $(LIBMESH_CXXFLAGS) -o $(WORK)/exec/VerifyPhase utilities/VerifyPhase.o $(IMG_LIB)
+
+utilnoise: utilities/ImageReadAddNoiseWrite.cxx
+	$(PCC) $(PREC_FLAGS) $(PCC_FLAGS) $(ITK_CXXFLAGS) $(LIBMESH_CXXFLAGS) $(INCLUDE) -o utilities/ImageReadAddNoiseWrite.o -c $<
+	$(CLINKER) $(ITK_CXXFLAGS) $(LIBMESH_CXXFLAGS) -o $(WORK)/exec/ImageReadAddNoiseWrite utilities/ImageReadAddNoiseWrite.o $(IMG_LIB)
+
+
+$(obj_path)/.dummy:
+	@echo Creating $(obj_path) directory ...
+	@if [ -d  $(obj_path) ] ; then \
+		touch $@; \
+	   else mkdir $(obj_path); touch $@ ; \
+	   fi
+
+$(WORK)/exec/.dummy:
+	@echo Creating exec directory ...
+	@if [ -d  $(WORK)/exec ] ; then \
+		touch $@; \
+	   else mkdir $(WORK)/exec; touch $@ ; \
+	   fi

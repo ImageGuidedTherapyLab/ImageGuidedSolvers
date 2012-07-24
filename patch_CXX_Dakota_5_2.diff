@@ -1,0 +1,132 @@
+diff --git src/DakotaNonD.C src/DakotaNonD.C
+index 04fa069..acbfc49 100644
+--- src/DakotaNonD.C
++++ src/DakotaNonD.C
+@@ -1622,6 +1622,31 @@ void NonD::print_distribution_mappings(std::ostream& s) const
+   s << std::setprecision(write_precision)
+     << "\nLevel mappings for each response function:\n";
+   size_t i, j, width = write_precision+7, w2p2 = 2*width+2, w3p4 = 3*width+4;
++  std::vector< std::ofstream* >   RespFile;
++  std::vector< std::ofstream* >   ProbFile;
++  std::vector< std::ofstream* >    RelFile;
++  std::vector< std::ofstream* > GenRelFile;
++  for (i=0; i<requestedRespLevels[0].length(); ++i) {
++    std::ostringstream filename ; // filename
++    filename << "response." << i << ".txt";
++    RespFile.push_back( new std::ofstream(filename.str().c_str()) );
++  }
++  for (i=0; i<requestedProbLevels[0].length()  ; ++i) {
++    std::ostringstream filename ; // filename
++    filename << "probability." << i << ".txt";
++    ProbFile.push_back( new std::ofstream(filename.str().c_str()) );
++  }
++  for (i=0; i<requestedRelLevels[0].length()   ; ++i) {
++    std::ostringstream filename ; // filename
++    filename << "reliability." << i << ".txt";
++    RelFile.push_back( new std::ofstream(filename.str().c_str()) );
++  }
++  for (i=0; i<requestedGenRelLevels[0].length(); ++i) {
++    std::ostringstream filename ; // filename
++    filename << "genreliability." << i << ".txt";
++    GenRelFile.push_back( new std::ofstream(filename.str().c_str()) );
++  }
++
+   for (i=0; i<numFunctions; ++i) {
+     if (!requestedRespLevels[i].empty() || !requestedProbLevels[i].empty() ||
+ 	!requestedRelLevels[i].empty()  || !requestedGenRelLevels[i].empty()) {
+@@ -1637,6 +1662,7 @@ void NonD::print_distribution_mappings(std::ostream& s) const
+ 	s << "  " << std::setw(width) << requestedRespLevels[i][j] << "  ";
+ 	switch (respLevelTarget) {
+ 	case PROBABILITIES:
++  *RespFile[j] << ' ' << std::setw(width) << computedProbLevels[i][j] << std::endl ;
+ 	  s << std::setw(width) << computedProbLevels[i][j]   << '\n'; break;
+ 	case RELIABILITIES:
+ 	  s << std::setw(w2p2)  << computedRelLevels[i][j]    << '\n'; break;
+@@ -1646,20 +1672,41 @@ void NonD::print_distribution_mappings(std::ostream& s) const
+       }
+       size_t num_prob_levels = requestedProbLevels[i].length();
+       for (j=0; j<num_prob_levels; j++)
++       {
+ 	s << "  " << std::setw(width) << computedRespLevels[i][j]
+ 	  << "  " << std::setw(width) << requestedProbLevels[i][j] << '\n';
++  *ProbFile[j] << ' ' << std::setw(width) << computedRespLevels[i][j] << std::endl ;
++       }
+       size_t num_rel_levels = requestedRelLevels[i].length(),
+ 	     offset = num_prob_levels;
+       for (j=0; j<num_rel_levels; j++)
++       {
+ 	s << "  " << std::setw(width) << computedRespLevels[i][j+offset]
+ 	  << "  " << std::setw(w2p2)  << requestedRelLevels[i][j] << '\n';
++  *RelFile[j] << ' ' << std::setw(width) << computedRespLevels[i][j] << std::endl ;
++       }
+       size_t num_gen_rel_levels = requestedGenRelLevels[i].length();
+       offset += num_rel_levels;
+       for (j=0; j<num_gen_rel_levels; j++)
++       {
+ 	s << "  " << std::setw(width) << computedRespLevels[i][j+offset]
+ 	  << "  " << std::setw(w3p4)  << requestedGenRelLevels[i][j] << '\n';
++  *GenRelFile[j] << ' ' << std::setw(width) << computedRespLevels[i][j] << std::endl ;
++       }
+     }
+   }
++  for (i=0; i<requestedRespLevels[0].length(); ++i) {
++    RespFile[i]->close(); delete RespFile[i];
++  }
++  for (i=0; i<requestedProbLevels[0].length(); ++i) {
++    ProbFile[i]->close(); delete ProbFile[i];
++  }
++  for (i=0; i<requestedRelLevels[0].length(); ++i) {
++    RelFile[i]->close(); delete RelFile[i];
++  }
++  for (i=0; i<requestedGenRelLevels[0].length(); ++i) {
++    GenRelFile[i]->close(); delete GenRelFile[i];
++  }
+ }
+ 
+ } // namespace Dakota
+diff --git src/NonDExpansion.C src/NonDExpansion.C
+index 0c15d97..82ff51d 100644
+--- src/NonDExpansion.C
++++ src/NonDExpansion.C
+@@ -1708,6 +1708,11 @@ void NonDExpansion::print_moments(std::ostream& s)
+   // Also handle numerical exception of negative variance in either exp or num
+   PecosApproximation* poly_approx_rep;
+   size_t exp_mom, num_mom; bool prev_exception = false;
++  std::vector< std::ofstream* > momentFile(4);
++  momentFile[0] = new std::ofstream("meanFile.txt");
++  momentFile[1] = new std::ofstream("stddFile.txt");
++  momentFile[2] = new std::ofstream("skewFile.txt");
++  momentFile[3] = new std::ofstream("kurtFile.txt");
+   for (i=0; i<numFunctions; ++i) {
+     poly_approx_rep = (PecosApproximation*)poly_approxs[i].approx_rep();
+     if (poly_approx_rep && poly_approx_rep->expansion_coefficient_flag()) {
+@@ -1755,8 +1760,16 @@ void NonDExpansion::print_moments(std::ostream& s)
+ 	if (num_mom) {
+ 	  if (exp_mom)          s << '\n' << std::setw(14) << "numerical:  ";
+ 	  for (j=0; j<num_mom; ++j)
+-	    if (j==1) s << ' ' << std::setw(width) << std::sqrt(num_moments[j]);
+-	    else      s << ' ' << std::setw(width) << num_moments[j];
++	    if (j==1) 
++              {
++               s << ' ' << std::setw(width) << std::sqrt(num_moments[j]);
++  *momentFile[j] << ' ' << std::setw(width) << std::sqrt(num_moments[j]) << std::endl ;
++              }
++	    else     
++              {
++               s << ' ' << std::setw(width) << num_moments[j];
++  *momentFile[j] << ' ' << std::setw(width) << num_moments[j] << std::endl ;
++              }
+ 	}
+ 	prev_exception = false;
+       }
+@@ -1770,6 +1783,10 @@ void NonDExpansion::print_moments(std::ostream& s)
+       */
+     }
+   }
++  momentFile[0]->close(); delete momentFile[0];
++  momentFile[1]->close(); delete momentFile[1];
++  momentFile[2]->close(); delete momentFile[2];
++  momentFile[3]->close(); delete momentFile[3];
+ }
+ 
+ 
