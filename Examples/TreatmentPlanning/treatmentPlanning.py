@@ -273,6 +273,18 @@ def pennesModeling(**kwargs):
            print "plotting contour:",idContour,contourValue
            vtkContour.SetValue( idContour,contourValue )
         vtkContour.Update( )
+        # FIXME  notice that order of operations is IMPORTANT
+        # FIXME   translation followed by rotation will give different results
+        # FIXME   than rotation followed by translation
+        # FIXME  Translate -> RotateZ -> RotateY -> RotateX -> Scale seems to be the order of paraview
+        # scale back to millimeter
+        AffineTransform = vtk.vtkTransform()
+        AffineTransform.Translate([ 0.0,0.0,0.0])
+        AffineTransform.RotateZ(0.0 )
+        AffineTransform.RotateY(0.0 )
+        AffineTransform.RotateX(0.0 )
+        AffineTransform.Scale([1000.,1000.,1000.])
+
         stlWriter = vtk.vtkSTLWriter()
         stlWriter.SetInput(vtkContour.GetOutput( ))
         stlWriter.SetFileName("fem.stl")
