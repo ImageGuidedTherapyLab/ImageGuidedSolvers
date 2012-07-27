@@ -5,7 +5,7 @@ from Cython.Distutils import build_ext
 import subprocess
 import os
 libmesh_dir = os.getenv("LIBMESH_DIR")
-tao_dir     = os.getenv("TAO_DIR")
+#tao_dir     = os.getenv("TAO_DIR")
 petsc_dir   = os.getenv("PETSC_DIR")
 petsc_arch  = os.getenv("PETSC_ARCH")
 mpi_dir     = os.getenv("MPI_DIR")
@@ -25,8 +25,8 @@ import petsc4py
 libmesh_include.append( "%s/include" % petsc4py.__path__.pop() )
 
 # tao include
-libmesh_include.append( "%s"         % tao_dir)
-libmesh_include.append( "%s/include" % tao_dir)
+#libmesh_include.append( "%s"         % tao_dir)
+#libmesh_include.append( "%s/include" % tao_dir)
 # local includes
 libmesh_include.append( "Code/Common")
 libmesh_include.append( "Code/TreatmentPlanning")
@@ -90,7 +90,7 @@ libmesh_petsc_libraries=["mesh",
                "parmetis",
                "sfcurves",
                "tetgen",
-               "triangle",
+#               "triangle",
 #               "petscsnes",
 #               "petscksp",
 #               "petscdm",

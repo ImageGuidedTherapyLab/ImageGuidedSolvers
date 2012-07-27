@@ -2,9 +2,8 @@
 #ifndef optimizationParameter_H
 #define optimizationParameter_H
 
-// petsctao includes
+// petsc includes
 #include "petsc_macro.h" 
-#include "tao.h" 
 
 //use Explicit system as the data storage...
 #include "explicit_system.h"

@@ -26,7 +26,7 @@ all:
 
 
 ####### BASE PETSC  INCLUDE FILES are included in TAO base files
-include ${TAO_DIR}/bmake/tao_common
+include ${PETSC_DIR}/conf/variables
 include ${DDDAS_SRC}/conf/variables
 
 #If you wish to eliminate the default known suffixes instead of just adding to them, write a rule for .SUFFIXES with no prerequisites. By special dispensation, this eliminates all existing prerequisites of .SUFFIXES. You can then write another rule to add the suffixes you want. For example,

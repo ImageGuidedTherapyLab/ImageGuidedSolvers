@@ -111,7 +111,19 @@ PennesBioheatModel::PennesBioheatModel(
   // density and specific heats
   rho= controlfile("material/rho",1.e3); // [kg/m^3]
   specific_heat= controlfile("material/specific_heat",3840.0); //[J/kg/C]
-  m_TimeDerivativeScalingFactor = 1.0/rho/specific_heat;
+  // use crank nicolson for temperature
+  // FIXME: will this work in multi-domain case ? 
+  // FIXME: will this work in multi-domain case ? 
+  if( this->TransientTerm(0) )  
+    {
+     PetscPrintf(PETSC_COMM_WORLD,"scale transient...\n");
+     m_TimeDerivativeScalingFactor = 1.0/rho/specific_heat;
+    }
+  else // steady state
+    {
+     PetscPrintf(PETSC_COMM_WORLD,"scale steady state...\n");
+     m_TimeDerivativeScalingFactor = 1.0;
+    }
 
   // set initial condition parameters for temperature
   m_bodyTemp     = controlfile("initial_condition/u_init",37.0);//celcius

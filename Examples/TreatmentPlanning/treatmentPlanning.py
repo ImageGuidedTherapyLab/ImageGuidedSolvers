@@ -92,8 +92,11 @@ def pennesModeling(**kwargs):
   vtkImageMask = vtkSetupReader.GetOutput()
   dimensions = vtkSetupReader.GetOutput().GetDimensions()
   numberPointsImage =  vtkSetupReader.GetOutput().GetNumberOfPoints()
-  spacing = vtkSetupReader.GetOutput().GetSpacing()
-  origin  = vtkSetupReader.GetOutput().GetOrigin()
+  spacing_mm = vtkSetupReader.GetOutput().GetSpacing()
+  origin_mm  = vtkSetupReader.GetOutput().GetOrigin()
+  # convert to meters
+  spacing = [dx*.001 for dx in spacing_mm]
+  origin  = [x0*.001 for x0 in  origin_mm]
   
   # pass pointer to c++
   image_cells = vtkImageMask.GetPointData() 
@@ -216,19 +219,22 @@ def pennesModeling(**kwargs):
   #for (idpos,(pos0,pos1)) in enumerate(laserPositionList):
   # loop and read new laser parameters
   while(True):
-    if(os.path.getmtime("./laser.pkl") > timeStamp):
-      timeStamp = os.path.getmtime("./laser.pkl") 
-      pkl_file = open('./laser.pkl' , 'rb')
-      laserParams = pickle.load(pkl_file)
-      pkl_file.close()
+    if(os.path.getmtime(fem_params['ini_filename']) > timeStamp):
+      timeStamp = os.path.getmtime(fem_params['ini_filename'] ) 
+      newIni = ConfigParser.SafeConfigParser({})
+      newIni.read(fem_params['ini_filename'])
 
-      print "laser position = ", laserParams['power'],laserParams
-      pennesSystem.PennesSDASystemUpdateLaserPower(laserParams['power'],1)
+      laserParams = {}
+      laserParams['position1'] = [newIni.getfloat("probe",varID ) for varID in ["x_0","y_0","z_0"] ]
+      laserParams['position2'] = [newIni.getfloat("probe",varID ) for varID in ["x_1","y_1","z_1"] ]
+
+      print "laser position = ", newIni.getfloat("timestep","power") , laserParams
+      pennesSystem.PennesSDASystemUpdateLaserPower(newIni.getfloat("timestep","power"),1)
       pennesSystem.PennesSDASystemUpdateLaserPosition(laserParams['position1'],laserParams['position2'])
       pennesSystem.SystemSolve( ) 
       #fem.StoreTransientSystemTimeStep("StateSystem",timeID ) 
       #exodusII_IO.WriteTimeStep(MeshOutputFile ,eqnSystems, idpos+2, idpos*kwargs['deltat'])  
-      exodusII_IO.WriteTimeStep(MeshOutputFile ,eqnSystems, 1, 0.0)  
+      exodusII_IO.WriteTimeStep(MeshOutputFile ,eqnSystems, 2, 1.0)  
       exodusII_IO.WriteParameterSystems(eqnSystems)  
       # write to txt file
       if( petscRank ==0 ):
@@ -240,19 +246,38 @@ def pennesModeling(**kwargs):
         ntime  = vtkExodusIIReader.GetNumberOfTimeSteps()
         variableID = "u0"
         print "ntime %d %s " % (ntime,variableID)
-        vtkExodusIIReader.SetTimeStep(0) 
+        vtkExodusIIReader.SetTimeStep(1) 
         vtkExodusIIReader.SetPointResultArrayStatus(variableID,1)
         vtkExodusIIReader.Update()
+        curInput = None
         # multi block
         if vtkExodusIIReader.GetOutput().IsA("vtkMultiBlockDataSet"):
           iter = vtkExodusIIReader.GetOutput().NewIterator()
           iter.UnRegister(None)
           iter.InitTraversal()
           curInput = iter.GetCurrentDataObject()
-          fem_point_data= curInput.GetPointData() 
-          Soln = vtkNumPy.vtk_to_numpy(fem_point_data.GetArray(variableID)) 
-          # concatenate blocks
-          numpy.savetxt( "temperature.txt" ,Soln)
+        else: 
+          curInput = vtkExodusIIReader.GetOutput()
+        #fem_point_data= curInput.GetPointData().GetArray('u0') 
+        #Soln=vtkNumPy.vtk_to_numpy(fem_point_data)
+        #numpy.savetxt( "temperature.txt" ,Soln)
+        vtkContour = vtk.vtkContourFilter()
+        vtkContour.SetInput( curInput )
+        # TODO: not sure why this works...
+        # set the array to process at the temperature == u0
+        vtkContour.SetInputArrayToProcess(0,0,0,0,'u0')
+        contourValuesList  = eval(config.get('exec','contours'))
+        vtkContour.SetNumberOfContours( len(contourValuesList ) )
+        print "plotting array:", vtkContour.GetArrayComponent( )
+        for idContour,contourValue in enumerate(contourValuesList):
+           print "plotting contour:",idContour,contourValue
+           vtkContour.SetValue( idContour,contourValue )
+        vtkContour.Update( )
+        stlWriter = vtk.vtkSTLWriter()
+        stlWriter.SetInput(vtkContour.GetOutput( ))
+        stlWriter.SetFileName("fem.stl")
+        stlWriter.SetFileTypeToBinary()
+        stlWriter.Write()
     else:
       print "waiting on user input.."
       time.sleep(2)
@@ -279,8 +304,8 @@ if (options.config_ini != None):
 
   
   fem_params = {}
-  fem_params['powerHistory']  = eval(config.get('timestep','powerhistory'))
-  fem_params['deltat']        =  5.0
+  fem_params['powerHistory']  = [[1,2],[0.0,config.getfloat('timestep','power')]]
+  fem_params['deltat']        =  1.0
   fem_params['ntime']         =  fem_params['powerHistory'][0][-1]
   fem_params['nsubstep']      =  1
   fem_params['physics']       = "AddPennesSDASystem"
@@ -288,6 +313,7 @@ if (options.config_ini != None):
   fem_params['fileID']        = "0"
   # store the entire configuration file for convienence
   fem_params['config_parser'] = config
+  fem_params['ini_filename'] = options.config_ini
 
   pennesModeling(**fem_params)
 else:

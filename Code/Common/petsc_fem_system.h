@@ -95,7 +95,7 @@ public:
     {libmesh_error();return;}
 
   /** adjoint gradient */
-  virtual PetscErrorCode FormGradient(TAO_APPLICATION ,Vec , Vec )
+  virtual PetscErrorCode FormGradient(Vec , Vec )
     {libmesh_error();return 0;}
 
   /** hessian vector product */

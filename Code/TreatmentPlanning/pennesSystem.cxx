@@ -43,6 +43,7 @@ System * AddPennesSDASystem( char *SystemName,
             &m_eqn_systems->add_system< PennesSDASystem > (SystemName)
                                                     ) ; 
   m_pdeSolver->deltat = DeltaT;
+  std::cout <<"deltat = "<< m_pdeSolver->deltat <<std::endl;
   PetscFunctionReturn(m_pdeSolver);
 
 }
@@ -102,6 +103,7 @@ System * AddPennesRFSystem( char *SystemName,
                      RFASystem < PennesVoltage > > (SystemName)
                                          ) ; 
   m_pdeSolver->deltat = DeltaT;
+  std::cout <<"deltat = "<< m_pdeSolver->deltat <<std::endl;
   PetscFunctionReturn(m_pdeSolver);
 
 }
@@ -123,6 +125,7 @@ System * AddPennesDeltaPSystem( char *SystemName,
           RHTESystem < PennesDeltaP1 > > (SystemName)
                                          ) ; 
   m_pdeSolver->deltat = DeltaT;
+  std::cout <<"deltat = "<< m_pdeSolver->deltat <<std::endl;
   PetscFunctionReturn(m_pdeSolver);
 
 }

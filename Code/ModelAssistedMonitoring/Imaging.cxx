@@ -1,5 +1,3 @@
-// tao includes
-#include "tao.h"
 
 // libmesh includes
 #include "libmesh.h"
