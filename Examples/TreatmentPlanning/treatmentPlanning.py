@@ -284,9 +284,14 @@ def pennesModeling(**kwargs):
         AffineTransform.RotateY(0.0 )
         AffineTransform.RotateX(0.0 )
         AffineTransform.Scale([1000.,1000.,1000.])
-
+        # scale to millimeter
+        transformFilter = vtk.vtkTransformFilter()
+        transformFilter.SetInput(vtkContour.GetOutput( )) 
+        transformFilter.SetTransform(AffineTransform) 
+        transformFilter.Update()
+        # write stl file
         stlWriter = vtk.vtkSTLWriter()
-        stlWriter.SetInput(vtkContour.GetOutput( ))
+        stlWriter.SetInput(transformFilter.GetOutput( ))
         stlWriter.SetFileName("fem.stl")
         stlWriter.SetFileTypeToBinary()
         stlWriter.Write()
