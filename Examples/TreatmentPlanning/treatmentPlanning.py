@@ -64,15 +64,12 @@ def pennesModeling(**kwargs):
                config.get("labels","csf"        ):"csf"  , 
                config.get("labels","tumor"      ):"tumor", 
                config.get("labels","vessel"     ):"vessel"}
-
-  # echo lookup table
-  if( petscRank ==0 ):
-     print "lookup tables"
-     print "labels"      , labelTable
-     print "conductivity", k_0Table  
-     print "perfusion"   , w_0Table  
-     print "absorption"  , mu_aTable  
-     print "scattering"  , mu_sTable  
+  labelCount= {"default":0,
+               "grey"   :0, 
+               "white"  :0, 
+               "csf"    :0, 
+               "tumor"  :0, 
+               "vessel" :0}
   # imaging params
   import vtk 
   import vtk.util.numpy_support as vtkNumPy 
@@ -102,7 +99,7 @@ def pennesModeling(**kwargs):
   image_cells = vtkImageMask.GetPointData() 
   data_array = vtkNumPy.vtk_to_numpy( image_cells.GetArray(0) ) 
   # need to pass numpy array's w/ Fortran storage... ie painful to debug
-  v1 = PETSc.Vec().createWithArray(numpy.ravel(data_array,order='F'), comm=PETSc.COMM_SELF)
+  imageDataVec = PETSc.Vec().createWithArray(numpy.ravel(data_array,order='F'), comm=PETSc.COMM_SELF)
 
   # FIXME - center around quadrature in out-of-plane direction
   # FIXME - need better out of plane cooling model
@@ -158,30 +155,40 @@ def pennesModeling(**kwargs):
   # setup imaging to interpolate onto FEM mesh
   femImaging = femLibrary.PytttkImaging(getpot, dimensions ,origin,spacing) 
   # Project imaging onto libMesh data structures
-  femImaging.ProjectImagingToFEMMesh("ElemImageMask" ,0.0,v1,eqnSystems)  
-  femImaging.ProjectImagingToFEMMesh("StateSystem" ,0.0,v1,eqnSystems)  
+  femImaging.ProjectImagingToFEMMesh("ElemImageMask" ,0.0,imageDataVec,eqnSystems)  
+  femImaging.ProjectImagingToFEMMesh("StateSystem"   ,0.0,imageDataVec,eqnSystems)  
 
   # create dirichlet nodes from this mask
   numNodes = pennesSystem.PetscFEMSystemCreateNodeSetFromMask(1.0,1)
   print "# of dirichlet nodes %d" %numNodes 
 
-
   # get image label as numpy array
   imageLabel = maskElemSystem.GetSolutionVector()[...]
-  imageLabel = numpy.floor(10.0*imageLabel.copy())+1
-  k_0Label  = numpy.floor(10.0*imageLabel.copy())+1
-  w_0Label  = numpy.floor(10.0*imageLabel.copy())+1
-  mu_aLabel = numpy.floor(10.0*imageLabel.copy())+1
-  mu_sLabel = numpy.floor(10.0*imageLabel.copy())+1
+  #imageLabel = numpy.floor(10.0*imageLabel.copy())+1
+  k_0Label  = imageLabel.copy()
+  w_0Label  = imageLabel.copy()
+  mu_aLabel = imageLabel.copy()
+  mu_sLabel = imageLabel.copy()
   for (idpos,label) in enumerate(imageLabel):
      try:
        tissueType = labelTable[int(label)]
      except KeyError:
        tissueType = "default"
+     labelCount[tissueType] = labelCount[tissueType] + 1
      k_0Label[ idpos] = k_0Table[ tissueType]
      w_0Label[ idpos] = w_0Table[ tissueType]
      mu_aLabel[idpos] = mu_aTable[tissueType]
      mu_sLabel[idpos] = mu_sTable[tissueType]
+  # echo lookup table
+  if( petscRank ==0 ):
+     print "lookup tables"
+     print "labeling %d voxels" % len(imageLabel)
+     print "labels"      , labelTable
+     print "counts"      , labelCount
+     print "conductivity", k_0Table  
+     print "perfusion"   , w_0Table  
+     print "absorption"  , mu_aTable  
+     print "scattering"  , mu_sTable  
   # create array of imaging data as petsc vec
   k_0Vec  = PETSc.Vec().createWithArray(k_0Label , comm=PETSc.COMM_SELF)
   w_0Vec  = PETSc.Vec().createWithArray(w_0Label , comm=PETSc.COMM_SELF)
