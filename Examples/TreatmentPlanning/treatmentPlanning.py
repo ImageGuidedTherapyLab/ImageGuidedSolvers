@@ -37,24 +37,32 @@ def pennesModeling(**kwargs):
     for name,value in  config.items(section):
       #print "%s/%s" % (section,name) , value
       getpot.SetIniValue( "%s/%s" % (section,name) , value ) 
+  
+  # nodeset 1 will be treated as dirichlet 
+  dirichletID = 1
+  getpot.SetIniValue( "bc/u_dirichlet" , '%d' % dirichletID ) 
 
   # set tissue lookup tables
   k_0Table  = {"default":config.getfloat("thermal_conductivity","k_0_healthy")  ,
+               "vessel" :config.getfloat("thermal_conductivity","k_0_healthy")  ,
                "grey"   :config.getfloat("thermal_conductivity","k_0_grey"   )  ,
                "white"  :config.getfloat("thermal_conductivity","k_0_white"  )  ,
                "csf"    :config.getfloat("thermal_conductivity","k_0_csf"    )  ,
                "tumor"  :config.getfloat("thermal_conductivity","k_0_tumor"  )  }
   w_0Table  = {"default":config.getfloat("perfusion","w_0_healthy")  ,
+               "vessel" :config.getfloat("perfusion","w_0_healthy")  ,
                "grey"   :config.getfloat("perfusion","w_0_grey"   )  ,
                "white"  :config.getfloat("perfusion","w_0_white"  )  ,
                "csf"    :config.getfloat("perfusion","w_0_csf"    )  ,
                "tumor"  :config.getfloat("perfusion","w_0_tumor"  )  }
   mu_aTable = {"default":config.getfloat("optical","mu_a_healthy")  ,
+               "vessel" :config.getfloat("optical","mu_a_healthy")  ,
                "grey"   :config.getfloat("optical","mu_a_grey"   )  ,
                "white"  :config.getfloat("optical","mu_a_white"  )  ,
                "csf"    :config.getfloat("optical","mu_a_csf"    )  ,
                "tumor"  :config.getfloat("optical","mu_a_tumor"  )  }
   mu_sTable = {"default":config.getfloat("optical","mu_s_healthy")  ,
+               "vessel" :config.getfloat("optical","mu_s_healthy")  ,
                "grey"   :config.getfloat("optical","mu_s_grey"   )  ,
                "white"  :config.getfloat("optical","mu_s_white"  )  ,
                "csf"    :config.getfloat("optical","mu_s_csf"    )  ,
@@ -159,7 +167,7 @@ def pennesModeling(**kwargs):
   femImaging.ProjectImagingToFEMMesh("StateSystem"   ,0.0,imageDataVec,eqnSystems)  
 
   # create dirichlet nodes from this mask
-  numNodes = pennesSystem.PetscFEMSystemCreateNodeSetFromMask(1.0,1)
+  numNodes = pennesSystem.PetscFEMSystemCreateNodeSetFromMask(config.getfloat("labels","vessel"),dirichletID)
   print "# of dirichlet nodes %d" %numNodes 
 
   # get image label as numpy array
@@ -171,7 +179,7 @@ def pennesModeling(**kwargs):
   mu_sLabel = imageLabel.copy()
   for (idpos,label) in enumerate(imageLabel):
      try:
-       tissueType = labelTable[int(label)]
+       tissueType = labelTable["%d"%int(label)]
      except KeyError:
        tissueType = "default"
      labelCount[tissueType] = labelCount[tissueType] + 1
@@ -179,16 +187,6 @@ def pennesModeling(**kwargs):
      w_0Label[ idpos] = w_0Table[ tissueType]
      mu_aLabel[idpos] = mu_aTable[tissueType]
      mu_sLabel[idpos] = mu_sTable[tissueType]
-  # echo lookup table
-  if( petscRank ==0 ):
-     print "lookup tables"
-     print "labeling %d voxels" % len(imageLabel)
-     print "labels"      , labelTable
-     print "counts"      , labelCount
-     print "conductivity", k_0Table  
-     print "perfusion"   , w_0Table  
-     print "absorption"  , mu_aTable  
-     print "scattering"  , mu_sTable  
   # create array of imaging data as petsc vec
   k_0Vec  = PETSc.Vec().createWithArray(k_0Label , comm=PETSc.COMM_SELF)
   w_0Vec  = PETSc.Vec().createWithArray(w_0Label , comm=PETSc.COMM_SELF)
@@ -273,7 +271,7 @@ def pennesModeling(**kwargs):
         # TODO: not sure why this works...
         # set the array to process at the temperature == u0
         vtkContour.SetInputArrayToProcess(0,0,0,0,'u0')
-        contourValuesList  = eval(config.get('exec','contours'))
+        contourValuesList  = eval(newIni.get('exec','contours'))
         vtkContour.SetNumberOfContours( len(contourValuesList ) )
         print "plotting array:", vtkContour.GetArrayComponent( )
         for idContour,contourValue in enumerate(contourValuesList):
@@ -285,11 +283,16 @@ def pennesModeling(**kwargs):
         # FIXME   than rotation followed by translation
         # FIXME  Translate -> RotateZ -> RotateY -> RotateX -> Scale seems to be the order of paraview
         # scale back to millimeter
+        # TODO verify that the data sets are registered in the native slicer coordinate system
+        # TODO   segmented data MUST be read in with:
+        # TODO add data -> volume -> show options -> ignore orientation
+        # TODO add data -> volume -> show options -> ignore orientation
+        # TODO add data -> volume -> show options -> ignore orientation
         AffineTransform = vtk.vtkTransform()
         AffineTransform.Translate([ 0.0,0.0,0.0])
-        AffineTransform.RotateZ(0.0 )
-        AffineTransform.RotateY(0.0 )
-        AffineTransform.RotateX(0.0 )
+        AffineTransform.RotateZ( 0.0  )
+        AffineTransform.RotateY( 0.0  )
+        AffineTransform.RotateX( 0.0  )
         AffineTransform.Scale([1000.,1000.,1000.])
         # scale to millimeter
         transformFilter = vtk.vtkTransformFilter()
@@ -304,6 +307,16 @@ def pennesModeling(**kwargs):
         stlWriter.Write()
     else:
       print "waiting on user input.."
+      # echo lookup table
+      if( petscRank ==0 ):
+         print "lookup tables"
+         print "labeled %d voxels" % len(imageLabel)
+         print "labels"      , labelTable
+         print "counts"      , labelCount
+         print "conductivity", k_0Table  
+         print "perfusion"   , w_0Table  
+         print "absorption"  , mu_aTable  
+         print "scattering"  , mu_sTable  
       time.sleep(2)
 ## end def pennesModeling(**kwargs)
 ####################################################################
