@@ -38,9 +38,9 @@ def pennesModeling(**kwargs):
       #print "%s/%s" % (section,name) , value
       getpot.SetIniValue( "%s/%s" % (section,name) , value ) 
   
-  # nodeset 1 will be treated as dirichlet 
+  # nodeset 1 will be treated as dirichlet
   dirichletID = 1
-  getpot.SetIniValue( "bc/u_dirichlet" , '%d' % dirichletID ) 
+  getpot.SetIniValue( "bc/u_dirichlet" , '%d' % dirichletID )
 
   # set tissue lookup tables
   k_0Table  = {"default":config.getfloat("thermal_conductivity","k_0_healthy")  ,
@@ -305,6 +305,12 @@ def pennesModeling(**kwargs):
         stlWriter.SetFileName("fem.stl")
         stlWriter.SetFileTypeToBinary()
         stlWriter.Write()
+        # write support file to signal full stl file is written
+        #  Slicer module will wait for this file to be written
+        #  before trying to open stl file to avoid incomplete reads
+        with open('./fem.finish', 'w') as signalFile:
+          signalFile.write("the stl file has been written\n")
+ 
     else:
       print "waiting on user input.."
       # echo lookup table
