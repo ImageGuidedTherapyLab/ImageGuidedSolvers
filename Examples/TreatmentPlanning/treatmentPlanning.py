@@ -266,18 +266,7 @@ def pennesModeling(**kwargs):
         #fem_point_data= curInput.GetPointData().GetArray('u0') 
         #Soln=vtkNumPy.vtk_to_numpy(fem_point_data)
         #numpy.savetxt( "temperature.txt" ,Soln)
-        vtkContour = vtk.vtkContourFilter()
-        vtkContour.SetInput( curInput )
-        # TODO: not sure why this works...
-        # set the array to process at the temperature == u0
-        vtkContour.SetInputArrayToProcess(0,0,0,0,'u0')
-        contourValuesList  = eval(newIni.get('exec','contours'))
-        vtkContour.SetNumberOfContours( len(contourValuesList ) )
-        print "plotting array:", vtkContour.GetArrayComponent( )
-        for idContour,contourValue in enumerate(contourValuesList):
-           print "plotting contour:",idContour,contourValue
-           vtkContour.SetValue( idContour,contourValue )
-        vtkContour.Update( )
+
         # FIXME  notice that order of operations is IMPORTANT
         # FIXME   translation followed by rotation will give different results
         # FIXME   than rotation followed by translation
@@ -296,12 +285,49 @@ def pennesModeling(**kwargs):
         AffineTransform.Scale([1000.,1000.,1000.])
         # scale to millimeter
         transformFilter = vtk.vtkTransformFilter()
-        transformFilter.SetInput(vtkContour.GetOutput( )) 
+        transformFilter.SetInput(curInput) 
         transformFilter.SetTransform(AffineTransform) 
         transformFilter.Update()
+
+        # setup contour filter
+        vtkContour = vtk.vtkContourFilter()
+        vtkContour.SetInput( transformFilter.GetOutput() )
+        # TODO: not sure why this works...
+        # set the array to process at the temperature == u0
+        vtkContour.SetInputArrayToProcess(0,0,0,0,'u0')
+        contourValuesList  = eval(newIni.get('exec','contours'))
+        vtkContour.SetNumberOfContours( len(contourValuesList ) )
+        print "plotting array:", vtkContour.GetArrayComponent( )
+        for idContour,contourValue in enumerate(contourValuesList):
+           print "plotting contour:",idContour,contourValue
+           vtkContour.SetValue( idContour,contourValue )
+        vtkContour.Update( )
+
+        # setup threshold filter
+        vtkThreshold = vtk.vtkThreshold()
+        vtkThreshold.SetInput( transformFilter.GetOutput() )
+        vtkThreshold.ThresholdByLower( contourValuesList[0] )
+        #vtkThreshold.SetSelectedComponent( 0 ) 
+        vtkThreshold.SetComponentModeToUseAny( ) 
+        vtkThreshold.Update()
+
+        # resample onto image
+        vtkResample = vtk.vtkCompositeDataProbeFilter()
+        vtkResample.SetInput( vtkImageMask )
+        vtkResample.SetSource( vtkThreshold.GetOutput() )
+        vtkResample.Update()
+
+        # write output
+        print "writing fem.vtk "
+        vtkImageWriter = vtk.vtkDataSetWriter()
+        vtkImageWriter.SetFileTypeToBinary()
+        vtkImageWriter.SetFileName("fem.vtk")
+        vtkImageWriter.SetInput(vtkResample.GetOutput())
+        vtkImageWriter.Update()
+
         # write stl file
         stlWriter = vtk.vtkSTLWriter()
-        stlWriter.SetInput(transformFilter.GetOutput( ))
+        stlWriter.SetInput(vtkContour.GetOutput( ))
         stlWriter.SetFileName("fem.stl")
         stlWriter.SetFileTypeToBinary()
         stlWriter.Write()
