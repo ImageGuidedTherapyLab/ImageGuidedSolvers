@@ -283,13 +283,13 @@ def ExtractSolutionFromExodus(inputExodusFile,variableID,timeID,fileID):
       Soln.append( vtkNumPy.vtk_to_numpy(fem_point_data.GetArray(variableID)) ) 
       iter.GoToNextItem();
     # concatenate blocks
-    numpy.savetxt( (SolnOutputTemplate+".%d") % (variableID,timeID,fileID),numpy.concatenate(Soln))
+    numpy.savetxt( ("data/"+SolnOutputTemplate+".%d") % (variableID,timeID,fileID),numpy.concatenate(Soln))
   # single block
   else:
     curInput = vtkExodusIIReader.GetOutput()
     fem_point_data= curInput.GetPointData() 
     Soln = vtkNumPy.vtk_to_numpy(fem_point_data.GetArray(variableID)) 
-    numpy.savetxt( (SolnOutputTemplate+".%d") % (variableID,timeID,fileID),Soln)
+    numpy.savetxt( ("data/"+SolnOutputTemplate+".%d") % (variableID,timeID,fileID),Soln)
 # end def ExtractSolutionFromExodus(**kwargs):
 ####################################################################
 def pennesModeling(**kwargs):
@@ -1108,7 +1108,7 @@ if (options.pre_run != None):
                                "echo" , "pce.%04d.in"%idtime ,SolnOutputTemplate %(variable,idtime),
                                fullpathJob+"/data",None,None,"allow_existing_results template_directory '%s/%s/realization'" %(os.getcwd(),workID),
                                num_func,gPCVariables, responseList ,probabilityLevelList,reliabilityLevelList)
-           postRunStatFile.write("mkdir -p %s; cd %s; python $DDDAS_SRC/Examples/TreatmentPlanning/gPCWFS.py --extract_exo=%s/%s/realization;%s %s > /dev/null;" % ( fullpathJob,fullpathJob,os.getcwd(),workID,options.dakota_exe,dakotaTimeFile ))
+           postRunStatFile.write("mkdir -p %s/data; cd %s; python $DDDAS_SRC/Examples/TreatmentPlanning/gPCWFS.py --extract_exo=%s/%s/realization;%s %s > /dev/null;" % ( fullpathJob,fullpathJob,os.getcwd(),workID,options.dakota_exe,dakotaTimeFile ))
         postRunStatFile.write( "cd %s/%s; python $DDDAS_SRC/Examples/TreatmentPlanning/gPCWFS.py --assemble_stats=%s/%stime.%04d;" % (os.getcwd(),workID,scratchDir,workID,idtime) )
         postRunStatFile.write( "rm -rf %s/%stime.%04d; " % ( scratchDir,workID,idtime ) )
         postRunStatFile.write("\n" )
