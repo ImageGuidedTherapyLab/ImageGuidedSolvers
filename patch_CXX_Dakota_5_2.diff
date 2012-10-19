@@ -1,3 +1,69 @@
+diff --git packages/teuchos/src/Teuchos_SerialSymDenseMatrix.hpp packages/teuchos/src/Teuchos_SerialSymDenseMatrix.hpp
+index dd214db..ecda524 100755
+--- packages/teuchos/src/Teuchos_SerialSymDenseMatrix.hpp
++++ packages/teuchos/src/Teuchos_SerialSymDenseMatrix.hpp
+@@ -506,7 +506,8 @@ int SerialSymDenseMatrix<OrdinalType, ScalarType>::shapeUninitialized( OrdinalTy
+   deleteArrays(); // Get rid of anything that might be already allocated
+   numRowCols_ = numRowCols_in;
+   stride_ = numRowCols_;
+-  values_ = new ScalarType[stride_*numRowCols_];
++  unsigned long numArray = static_cast<unsigned long>(stride_)*static_cast<unsigned long>(numRowCols_);
++  values_ = new ScalarType[numArray];
+   valuesCopied_ = true;
+   return(0);
+ }
+@@ -749,19 +750,21 @@ inline ScalarType& SerialSymDenseMatrix<OrdinalType, ScalarType>::operator () (O
+ #ifdef HAVE_TEUCHOS_ARRAY_BOUNDSCHECK
+   checkIndex( rowIndex, colIndex );
+ #endif
++  long int rowMajor = static_cast<long int>(rowIndex) * static_cast<long int>(stride_) + static_cast<long int>(colIndex);
++  long int colMajor = static_cast<long int>(colIndex) * static_cast<long int>(stride_) + static_cast<long int>(rowIndex);
+   if ( rowIndex <= colIndex ) {
+     // Accessing upper triangular part of matrix
+     if (upper_)
+-      return(values_[colIndex * stride_ + rowIndex]);
++      return(values_[colMajor]);
+     else
+-      return(values_[rowIndex * stride_ + colIndex]);   
++      return(values_[rowMajor]);   
+   }
+   else {
+     // Accessing lower triangular part of matrix
+     if (upper_)
+-      return(values_[rowIndex * stride_ + colIndex]);
++      return(values_[rowMajor]);   
+     else
+-      return(values_[colIndex * stride_ + rowIndex]);
++      return(values_[colMajor]);
+   }
+ }
+   
+@@ -771,19 +774,21 @@ inline const ScalarType& SerialSymDenseMatrix<OrdinalType, ScalarType>::operator
+ #ifdef HAVE_TEUCHOS_ARRAY_BOUNDSCHECK
+   checkIndex( rowIndex, colIndex );
+ #endif
++  long int rowMajor = static_cast<long int>(rowIndex) * static_cast<long int>(stride_) + static_cast<long int>(colIndex);
++  long int colMajor = static_cast<long int>(colIndex) * static_cast<long int>(stride_) + static_cast<long int>(rowIndex);
+   if ( rowIndex <= colIndex ) {
+     // Accessing upper triangular part of matrix
+     if (upper_)
+-      return(values_[colIndex * stride_ + rowIndex]);
++      return(values_[colMajor]);
+     else
+-      return(values_[rowIndex * stride_ + colIndex]);   
++      return(values_[rowMajor]);   
+   }
+   else {
+     // Accessing lower triangular part of matrix
+     if (upper_)
+-      return(values_[rowIndex * stride_ + colIndex]);
++      return(values_[rowMajor]);   
+     else
+-      return(values_[colIndex * stride_ + rowIndex]);
++      return(values_[colMajor]);
+   }
+ }  
+ 
 diff --git src/DakotaNonD.C src/DakotaNonD.C
 index 04fa069..acbfc49 100644
 --- src/DakotaNonD.C
@@ -85,9 +151,20 @@ index 04fa069..acbfc49 100644
  
  } // namespace Dakota
 diff --git src/NonDExpansion.C src/NonDExpansion.C
-index 0c15d97..82ff51d 100644
+index 0c15d97..7cf20ee 100644
 --- src/NonDExpansion.C
 +++ src/NonDExpansion.C
+@@ -1439,8 +1439,8 @@ void NonDExpansion::compute_statistics()
+       poly_approx_rep->compute_total_effects();
+     }
+   }
+-  if (covariance_flag)
+-    compute_off_diagonal_covariance(); // diagonals were filled in above
++  //if (covariance_flag)
++  //  compute_off_diagonal_covariance(); // diagonals were filled in above
+ 
+   // ------------------------------
+   // Calculate numerical statistics
 @@ -1708,6 +1708,11 @@ void NonDExpansion::print_moments(std::ostream& s)
    // Also handle numerical exception of negative variance in either exp or num
    PecosApproximation* poly_approx_rep;
@@ -130,3 +207,12 @@ index 0c15d97..82ff51d 100644
  }
  
  
+@@ -1869,7 +1886,7 @@ void NonDExpansion::print_results(std::ostream& s)
+   s << "-------------------------------------------------------------------"
+     << "\nStatistics derived analytically from polynomial expansion:\n";
+   print_moments(s);
+-  print_covariance(s);
++  //print_covariance(s);
+ 
+   if (!subIteratorFlag && outputLevel >= NORMAL_OUTPUT)
+     print_local_sensitivity(s);
