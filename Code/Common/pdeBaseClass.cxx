@@ -22,9 +22,8 @@ PDEModelBaseClass::PDEModelBaseClass(GetPot &controlfile,EquationSystems &es):
   _equation_systems(es) // store the pointer
 
 {
-  // default is to not recompute 
-  _linearJacobian   = PETSC_TRUE;
-  _jacobianComputed = PETSC_FALSE;
+  // default is a linear PDE 
+  m_LinearPDE = PETSC_TRUE;
 
   // default residual boundary conditions
   ResidualBC[0] = &PDEModelBaseClass::residualNothingBC;

@@ -22,12 +22,12 @@ PetscFEMSystem::PetscFEMSystem (EquationSystems& es,
   FEMSystem                 (es, name, number)
 { 
   // default to the petsc linear solver
-  m_PetscLinearSolve  = true ; 
+  m_LinearSolve     = PETSC_TRUE ; 
 
   // control jacobian assembly
-  m_MassMatrix      = true ; 
-  m_StiffnessMatrix = true ; 
-  m_JacobianNotAssembled = true ; 
+  m_MassMatrix      = PETSC_TRUE ; 
+  m_StiffnessMatrix = PETSC_TRUE ; 
+  m_jacobianComputed= PETSC_FALSE ; 
 
   // power time step to use
   m_PowerID  = 0; 
@@ -76,9 +76,13 @@ prev_solution     ( const unsigned int &global_dof_number) const
 void PetscFEMSystem:: solve()
 {
   PetscFunctionBegin;
+
+  // print recomputation flags
+  this->PetscFEMSystem::printSelf(std::cout);
+
   // try a petsc linear solve if possible 
   // else default to the nonlinear solver
-  if( this->m_PetscLinearSolve )
+  if( this->m_LinearSolve )
     {
      // assemble 
      this->assembly(true,true);
@@ -280,27 +284,32 @@ void PetscFEMSystem::assembly(bool get_residual, bool get_jacobian)
  // apply BC for solution then assemble
  this->ApplyDirichlet();
 
+ PetscPrintf(PETSC_COMM_WORLD,"PetscFEMSystem::assembly residual %d jacobian %d\n", 
+                              get_residual,get_jacobian);
  // only assemble jacobian once...
- if( this->m_PetscLinearSolve && this->m_MassMatrix && this->m_StiffnessMatrix)
+ if( this->m_LinearSolve && this->m_MassMatrix && this->m_StiffnessMatrix)
    {// treat residual and jacobian separately 
     if( get_residual )
       {
+      PetscPrintf(PETSC_COMM_WORLD,"linear assembly residual...\n");
       PetscLogEventBegin(PetscFEMSysLogResidual,0,0,0,0); // log residual
       this->FEMSystem::assembly(get_residual,false);
       PetscLogEventEnd(  PetscFEMSysLogResidual,0,0,0,0); // log residual
       }
 
-    if( m_JacobianNotAssembled && get_jacobian )
+    if( !m_jacobianComputed && get_jacobian )
       {
+      PetscPrintf(PETSC_COMM_WORLD,"linear assembly jacobian...\n");
       PetscLogEventBegin(PetscFEMSysLogJacobian,0,0,0,0); // log jacobian
       this->FEMSystem::assembly(false,get_jacobian);
-      m_JacobianNotAssembled  = false;
+      m_jacobianComputed = PETSC_TRUE;
       PetscLogEventEnd(  PetscFEMSysLogJacobian,0,0,0,0); // log jacobian
       }
    }
  else
    {// default... no special assembly needed ... call base class
     PetscLogEventBegin(PetscFEMSysLogDefault,0,0,0,0); // log default
+    PetscPrintf(PETSC_COMM_WORLD,"default assembly...\n");
     this->FEMSystem::assembly(get_residual,get_jacobian);
     PetscLogEventEnd(  PetscFEMSysLogDefault,0,0,0,0); // log default
    }

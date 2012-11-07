@@ -300,7 +300,10 @@ def pennesModeling(**kwargs):
   import petsc4py, numpy
   # init petsc
   PetscOptions =  sys.argv
+  PetscOptions.append("-snes_monitor")
+  PetscOptions.append("-snes_converged_reason")
   PetscOptions.append("-ksp_monitor")
+  PetscOptions.append("-ksp_converged_reason")
   PetscOptions.append("-ksp_rtol")
   PetscOptions.append("1.0e-15")
   #PetscOptions.append("-help")

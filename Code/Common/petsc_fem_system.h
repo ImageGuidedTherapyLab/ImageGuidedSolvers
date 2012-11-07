@@ -159,14 +159,40 @@ public:
       return request_jacobian;
     }
   // control jacobian assembly
-  void AssembleMassMatrix(){ m_MassMatrix      = true ; 
-                             m_StiffnessMatrix = false;}
-  void AssembleStiffnessMatrix(){ m_MassMatrix      = false; 
-                                  m_StiffnessMatrix = true ;}
-  void AssembleFullJacobian(){ m_MassMatrix      = true ; 
-                               m_StiffnessMatrix = true ;}
-  void SetAssembleJacobian(bool state){m_JacobianNotAssembled =state; }
+  void AssembleMassMatrix(){ m_MassMatrix      = PETSC_TRUE ; 
+                             m_StiffnessMatrix = PETSC_FALSE;}
+  void AssembleStiffnessMatrix(){ m_MassMatrix      = PETSC_FALSE; 
+                                  m_StiffnessMatrix = PETSC_TRUE ;}
+  void AssembleFullJacobian(){ m_MassMatrix      = PETSC_TRUE ; 
+                               m_StiffnessMatrix = PETSC_TRUE ;}
+  void SetJacobianComputed(PetscTruth state){m_jacobianComputed=state; }
   void SetPowerID(int CurrentTimeID){m_PowerID=CurrentTimeID; }
+
+  //default is to recompute jacobian matrices
+  virtual PetscTruth linearStatePDE()
+   {  
+    if( !m_LinearSolve )
+     { // this is a nonlinear jacobian must recompute
+       return PETSC_FALSE;
+     }
+    else if(m_jacobianComputed)
+     { // the jacobian is linear and the jacobian has already been computed
+       return PETSC_TRUE;
+     }
+    else 
+     { // the jacobian is linear but we still need to compute jacobian once
+       m_jacobianComputed = PETSC_TRUE;
+       return PETSC_FALSE;
+     }
+   } 
+  virtual void printSelf(std::ostream& os)
+    { 
+      os << "PetscFEMSystem:  m_LinearSolve      =" << m_LinearSolve      << std::endl;
+      os << "PetscFEMSystem:  m_MassMatrix       =" << m_MassMatrix       << std::endl;
+      os << "PetscFEMSystem:  m_StiffnessMatrix  =" << m_StiffnessMatrix  << std::endl;
+      os << "PetscFEMSystem:  m_jacobianComputed =" << m_jacobianComputed << std::endl;
+      return; 
+    }
 
 protected:
   
@@ -179,10 +205,11 @@ protected:
   /** error tolerance for regression tests */
   PetscScalar errorTol;
   
-  bool m_PetscLinearSolve ,    ///< use KSPSolve
-       m_MassMatrix       ,    ///< assemble mass Matrix only
-       m_StiffnessMatrix  ,    ///< assemble Stiffness Matrix only
-       m_JacobianNotAssembled; ///< Jac not assembled yet
+  // recomputation flags
+  PetscTruth  m_LinearSolve      ,    ///< use KSPSolve
+              m_MassMatrix       ,    ///< assemble mass Matrix only
+              m_StiffnessMatrix  ,    ///< assemble Stiffness Matrix only
+              m_jacobianComputed; ///< jacobian has been computed already
 
 /*
   not needed??? why put solution into all vectors?

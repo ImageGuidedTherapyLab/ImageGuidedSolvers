@@ -51,7 +51,7 @@ public:
  virtual void fillSolutionBuffer( std::vector<PetscScalar> &,const unsigned int);
 
  //default is to recompute jacobian matrices
- virtual PetscTruth linearStatePDE(){  return PETSC_FALSE;} 
+ //virtual PetscTruth linearStatePDE(){  return PETSC_FALSE;} 
  virtual PetscTruth linearAdjointPDE(){return PETSC_FALSE;} 
    
  // sensitivity gradient for verification 

@@ -14,6 +14,8 @@ ThermalTherapySystem (EquationSystems& es, const std::string& name,
   #else
   NumericVector<Number> & StorageVec = this->add_vector( "old_local_solution",true, SERIAL);
   #endif
+  // make sure the same
+  m_LinearSolve =  m_MathModel.LinearPDE();
 }
 
 

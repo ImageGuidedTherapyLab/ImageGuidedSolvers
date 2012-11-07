@@ -64,7 +64,10 @@ public:
     * This is a wrapper to the templated constitutive data
     */
   virtual void printSelf(std::ostream& os)
-    { this->m_MathModel.printSelf(os); return; }
+    { 
+      this->m_MathModel.printSelf(os); 
+      return; 
+    }
 
   /** 
     * return exact solution 

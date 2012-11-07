@@ -114,7 +114,7 @@ BackgroundPhaseSystem(EquationSystems& es,
   m_MathModel            (*(es.parameters.get<GetPot*>("controlfile")),
                              es) // initialize constitutive data
 {
- this->m_JacobianNotAssembled  = true;
+ this->m_jacobianComputed      = PETSC_FALSE;
 }
 template < typename MathematicalModel >
 void BackgroundPhaseSystem< MathematicalModel > :: init_data ()
@@ -276,7 +276,7 @@ assembly(bool get_residual, bool get_jacobian)
            << " dirichlet nodes detected" << std::endl;
 
  // be sure to reassemble Jacobian b/c dirichlet BC changing...
- this->m_JacobianNotAssembled = true;
+ this->m_jacobianComputed = PETSC_FALSE;
  // assemble
  this->Parent::assembly(get_residual,get_jacobian);
 

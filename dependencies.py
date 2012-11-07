@@ -96,8 +96,8 @@ elif (options.build_libmesh ):
     #unwanted_itk_flags=-ansi -pedantic -D_GLIBCXX_DEBUG -D_GLIBCXX_DEBUG_PEDANTIC
     #libmesh_CXXFLAGS := $(filter-out $(unwanted_itk_flags),$(libmesh_CXXFLAGS))
     #libmesh_CXXFLAGS += -DMPICH_SKIP_MPICXX
-    os.system("patch -d %s -p0 < patch_CXX_libMesh_r4171.diff" % libMesh_dir)
-    os.system("cd %s;./configure --enable-everything --disable-tecplot --disable-vtk --disable-gzstreams;make -j 6" % libMesh_dir)
+    os.system("patch -d %s -p0 < patch_CXX_libMesh_0.7.3.1.diff" % libMesh_dir)
+    os.system("cd %s;./configure --enable-everything --disable-tecplot --disable-vtk --disable-gzstreams --disable-triangle;make -j 6" % libMesh_dir)
 elif (options.build_itk ):
     # setup ITK
     itk_home    = EnvironmentSetup("ITK_HOME")

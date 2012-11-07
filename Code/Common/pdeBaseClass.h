@@ -370,24 +370,6 @@ public:
   virtual PetscScalar d2pde_d2mu_s(      OPTGAUSSARG ){return 0.0;}
   virtual PetscScalar d2pde_dmu_a_dmu_s( OPTGAUSSARG ){return 0.0;}
 
-  //default is to recompute jacobian matrices
-  virtual PetscTruth linearStatePDE()
-   {  
-    if( !_linearJacobian )
-     { // this is a nonlinear jacobian must recompute
-       return PETSC_FALSE;
-     }
-    else if(_jacobianComputed)
-     { // the jacobian is linear and the jacobian has already been computed
-       return PETSC_TRUE;
-     }
-    else 
-     { // the jacobian is linear but we still need to compute jacobian once
-       _jacobianComputed = PETSC_TRUE;
-       return PETSC_FALSE;
-     }
-   } 
-
    void SetupOptimizationVariables(libMesh::MeshBase &,
                  std::vector<optimizationParameter*> &) ;
 
@@ -446,6 +428,10 @@ upper-packed storage mode:
   Real  TimeDerivativeScalingFactor() 
          {return m_TimeDerivativeScalingFactor;}
 
+  // return true if this is a linear solve
+  PetscTruth  LinearPDE()
+         {return m_LinearPDE;}
+
   /**
    *  return PETSC_TRUE if we are solving time dependet equations  
    *  on this domain
@@ -475,17 +461,16 @@ protected:
                      m_u_infty,        ///<  \f$ u_\infty  \f$ 
                      m_NeumannFlux;    ///<  \f$ \mathcal{G}  \f$ 
 
+  PetscTruth  m_LinearPDE;
+
   /**
    *  mass term to scale to time derivative to 1, \f$ \dot{u} = F(u)\f$
    *  @todo {m_TimeDerivativeScalingFactor will break verification problems}
    */
   Real  m_TimeDerivativeScalingFactor;
 
-  // recomputation flags
-  PetscTruth  _linearJacobian, _jacobianComputed;
-
- // store a pointer to all field parameters for plotting
- std::vector<optimizationParameter*> _fieldParameters;
+  // store a pointer to all field parameters for plotting
+  std::vector<optimizationParameter*> _fieldParameters;
 
 
 };

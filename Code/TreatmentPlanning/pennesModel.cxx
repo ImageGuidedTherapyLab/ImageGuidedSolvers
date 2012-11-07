@@ -45,7 +45,7 @@ void PennesBioheatModel::printSelf(std::ostream& os)
   // print base class info
   this->PDEModelBaseClass::printSelf(os); 
 
-  os << "PennesModel:    linearJacobian=" <<   _linearJacobian << std::endl;
+  os << "PennesModel:         linearPDE=" <<       m_LinearPDE << std::endl;
   os << "PennesModel:               w_1=" <<         w_1       << std::endl;
   os << "PennesModel:               k_1=" <<         k_1       << std::endl;
   os << "PennesModel:               rho=" <<               rho << std::endl;
@@ -204,8 +204,8 @@ PennesBioheatModel::PennesBioheatModel(
   //  }
 
   // test for non linear parameters
-  if ( k_1 != 0.0 )                                          _linearJacobian = PETSC_FALSE;
-  if ( w_1 != es.parameters.get<PetscScalar>("w_0_healthy")) _linearJacobian = PETSC_FALSE;
+  if ( k_1 != 0.0 )                                          m_LinearPDE = PETSC_FALSE;
+  if ( w_1 != es.parameters.get<PetscScalar>("w_0_healthy")) m_LinearPDE = PETSC_FALSE;
 
   // clear
   m_BulkFluidFlow.clear();
@@ -461,13 +461,13 @@ PennesStandardDiffusionApproximation::PennesStandardDiffusionApproximation(
    } 
 
   // test for non linear parameters
-  if ( mu_a_1 != es.parameters.get<PetscScalar>("mu_a_healthy") ) _linearJacobian = PETSC_FALSE;
-  if ( mu_s_1 != es.parameters.get<PetscScalar>("mu_s_healthy") ) _linearJacobian = PETSC_FALSE;
+  if ( mu_a_1 != es.parameters.get<PetscScalar>("mu_a_healthy") ) m_LinearPDE = PETSC_FALSE;
+  if ( mu_s_1 != es.parameters.get<PetscScalar>("mu_s_healthy") ) m_LinearPDE = PETSC_FALSE;
 
   // option to overwrite
   PetscTruth  nonlinearSolve=PETSC_FALSE;
   PetscOptionsGetTruth(PETSC_NULL,"-fem_linear_solve",&nonlinearSolve,PETSC_NULL);
-  if ( nonlinearSolve ) _linearJacobian = PETSC_FALSE;
+  if ( nonlinearSolve ) m_LinearPDE = PETSC_FALSE;
 
   // store a pointer to all field parameters for plotting
   _fieldParameters.push_back( &mu_a_0 );  
