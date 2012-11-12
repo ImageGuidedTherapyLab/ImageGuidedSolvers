@@ -337,6 +337,9 @@ TEST(PennesConstantSourceTerm, NeumannBC) {
   // Set the time stepping options
   state_system.deltat = deltat;
 
+  // setup the initial conditions
+  state_system.SetupInitialConditions();
+
   // And the nonlinear solver options
   DiffSolver &solver = *(state_system.time_solver->diff_solver().get());
   solver.quiet = controlfile("solver_quiet", false);
@@ -423,12 +426,16 @@ Number PennesExponentialSourceExactSolution(const Point&p ,
      exactvalue = std::exp( - mu_a_healthy * p(0) )/ mu_a_healthy/ k_0_healthy  
           * ( std::exp( k_0_healthy * mu_a_healthy * mu_a_healthy * time ) - 1.0 ); 
     }
-  else if (varName.find("u1")!=std::string::npos )
+  else if (varName.find("u1")!=std::string::npos ||
+           varName.find("u2")!=std::string::npos )
     {
      exactvalue = std::exp( - mu_a_healthy * p(0) ) ;  // input irradiance
      exactvalue = 0.0; // scattered fluence
     }
   else if (varName.find("d0")!=std::string::npos ||
+           varName.find("fx")!=std::string::npos ||
+           varName.find("fy")!=std::string::npos ||
+           varName.find("fz")!=std::string::npos ||
            varName.find("d1")!=std::string::npos )
     {
      exactvalue = 0.0; 
@@ -526,6 +533,9 @@ TEST(PennesExponentialSourceTerm, NeumannBC) {
 
   // Set the time stepping options
   state_system.deltat = deltat;
+
+  // setup the initial conditions
+  state_system.SetupInitialConditions();
 
   // And the nonlinear solver options
   DiffSolver &solver = *(state_system.time_solver->diff_solver().get());
@@ -708,6 +718,9 @@ TEST(PennesPlanarSourceTerm, CauchyNeumannBC) {
 
   // Set the time stepping options
   state_system.deltat = deltat;
+
+  // setup the initial conditions
+  state_system.SetupInitialConditions();
 
   // And the nonlinear solver options
   DiffSolver &solver = *(state_system.time_solver->diff_solver().get());
