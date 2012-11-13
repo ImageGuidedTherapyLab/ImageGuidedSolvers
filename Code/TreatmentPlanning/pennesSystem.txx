@@ -9,17 +9,18 @@ LITTSystem(EquationSystems& es,
                                                                name,
                                                              number) 
 {
+  GetPot &controlfile = *(es.parameters.get<GetPot*>("controlfile"));
   // Temperature and Damage
   // will be approximated using first-order approximation.
-  this->u_var = this->add_variable("u0", FIRST);
-  this->a_var = this->add_variable("d0", FIRST);
-  this->b_var = this->add_variable("d1", FIRST);
+  // use ini file to possibly change variable name
+  this->u_var = this->add_variable( "u0" , FIRST);
+  this->a_var = this->add_variable( "d0" , FIRST);
+  this->b_var = this->add_variable( "d1" , FIRST);
   // set for BC
   es.parameters.set<unsigned int>("u_var") = this->u_var;
   es.parameters.set<unsigned int>("a_var") = this->a_var;
   es.parameters.set<unsigned int>("b_var") = this->b_var;
   // set dirichlet BC
-  GetPot &controlfile = *(es.parameters.get<GetPot*>("controlfile"));
   int num_ids_u = controlfile.vector_variable_size("bc/u_dirichlet");
   for( int iii = 0; iii < num_ids_u ; iii++ )
     {

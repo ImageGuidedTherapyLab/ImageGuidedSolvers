@@ -362,6 +362,9 @@ SetupInitialConditions ()
     this->solution->close();
   } // end loop over subdomains    
 
+ // copy to old data structures
+ this->get_vector("old_global_solution") = *this->solution;
+
  // copy parallel data structures to local data structures
  this->solution->localize(*this->current_local_solution);
 

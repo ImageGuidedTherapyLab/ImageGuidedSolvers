@@ -340,8 +340,8 @@ public:
    *    DdamageDu(u) = DarrheniusDu / std::pow(std::log(2.0) + arrhenius ,2)
    *  inline functions should be in the header see @ref PDEModelInlineStrategy
    */
-  Real  perfusion(  const unsigned int &, const Real &, const Real &);
-  Real dperfusiondu(const unsigned int &, const Real &, const Real &, const Real &); 
+  virtual Real  perfusion(  const unsigned int &, const Real &, const Real &);
+  virtual Real dperfusiondu(const unsigned int &, const Real &, const Real &, const Real &); 
 
   /** 
    *  Should be inlined reaction term to simplicity and backward compatibility
@@ -1032,7 +1032,7 @@ Real PennesBioheatModel::dPennesReactionTermdu(
                                    ) ; 
 }
 // inline functions should be in the header see @ref PDEModelInlineStrategy
-inline 
+inline
 Real PennesBioheatModel::perfusion( 
                            const unsigned int &domainId, const Real &, const Real &damage) 
 { 
@@ -1041,7 +1041,7 @@ Real PennesBioheatModel::perfusion(
   return value ; // faster to multiply
 }
 // inline functions should be in the header see @ref PDEModelInlineStrategy
-inline 
+inline
 Real PennesBioheatModel::dperfusiondu(
                            const unsigned int &domainId, const Real &, const Real &damage, const Real &DdamageDu) 
 { 

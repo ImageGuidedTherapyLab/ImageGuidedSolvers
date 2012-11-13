@@ -143,6 +143,13 @@ public:
                                     const Point &, const int ) 
                                    {return 0.0;}
 
+  /** set to full damage to test nonlinear solve */
+  virtual PetscScalar getInitialDamage(unsigned int,unsigned int,
+                                       const Point&,const Parameters& )
+       { // for use in regression testing
+         return 1.e10;
+       }
+ 
   /** Print the Constitutive Data */
   virtual void printSelf(std::ostream &os) 
     {
@@ -152,6 +159,32 @@ public:
       //os << "VerifyPennesConstantSourceTerm.m_q0  =" <<   m_q0 << std::endl;
       PetscFunctionReturnVoid(); 
     }
+
+};
+
+/**
+ * Linear version for testing
+ */
+class VerifyLinearPennesConstantSourceTerm : public VerifyPennesConstantSourceTerm 
+{
+public:
+  // constructor
+  VerifyLinearPennesConstantSourceTerm( GetPot &controlfile,EquationSystems &es) : 
+        VerifyPennesConstantSourceTerm(         controlfile,                 es)
+    {
+      PetscFunctionBegin; 
+      PetscFunctionReturnVoid(); 
+    }
+  
+  /** inline functions should be in the header see @ref PDEModelInlineStrategy */
+  virtual Real perfusion(    const unsigned int &domainId, const Real &, const Real &) 
+    { 
+      Real value = w_0[domainId];
+      return value ; // faster to multiply
+    }
+  virtual Real dperfusiondu( const unsigned int &        , const Real &, const Real &, const Real &) 
+    {return 0.0;}
+
 
 };
 class VerifyPennesExponentialSourceTerm: public PennesDeltaP1 

@@ -787,6 +787,228 @@ TEST(PennesPlanarSourceTerm, CauchyNeumannBC) {
   // All done.  
   return ;
 }
+/** @file PennesRegression.cxx
+ *
+ * Verify that the Nonlinear perfusion gives different values than the linear
+ * perfusion on a simple domain
+ */
+TEST(PennesCompareLinearNonlinear, Linear) {
+
+  // Parse the input file
+  GetPot controlfile;
+
+  // Read in parameters from the input file
+  const Real deltat                    = controlfile("deltat", 1.0);
+  const unsigned int coarsegridsize    = controlfile("coarsegridsize", 1);
+  const unsigned int dim               = 3;
+  const unsigned int nstep             = 5;
+
+  // initial temp should be zero 
+  controlfile.set("initial_condition/u_init", 37.0 );
+  controlfile.set("material/rho", 1000.0 );
+  controlfile.set("material/specific_heat", 3000.0 );
+  controlfile.set("perfusion/w_0_healthy", 6.98 );
+  //controlfile.set("perfusion/w_1"        , 0.21 );
+  controlfile.set("bc/u_dirichlet"       , 1    );
+
+  // set power data
+  controlfile.set("power/nsize", nstep );
+  PetscScalar ConstPowerSourceValue = 7.1e8;
+  for (unsigned int timeID = 0 ; timeID < nstep ; timeID++)
+     {
+       std::ostringstream variableName; 
+       variableName << "power/power["<< timeID << "]" ;
+       controlfile.set(variableName.str(), ConstPowerSourceValue  );
+     }
+
+  // Create a mesh.
+  Mesh mesh(dim);
+  
+  // generate mesh w/ BC
+  std::vector<int> boundaryData(6,2);
+  boundaryData[4] = 1;
+  PetscErrorCode ierr = GenerateStructuredGrid(  mesh,
+                                                 100.0*coarsegridsize,
+                                                      coarsegridsize,
+                                                      coarsegridsize,
+                                                 0., .10,
+                                                 0., .01,
+                                                 0., .01,
+                                                 boundaryData) ;
+
+  // Print information about the mesh to the screen.
+  mesh.print_info();
+
+  // Create an equation systems object.
+  EquationSystems equation_systems (mesh);
+
+  // Declare the system and its variables.
+  // To refer to typedefs in the fixture, add the 'typename TestFixture::'
+  // prefix.  The 'typename' is required to satisfy the compiler.
+  equation_systems.parameters.set<GetPot*>("controlfile") = &controlfile;
+
+  LITTSystem<VerifyPennesConstantSourceTerm>  &state_system = 
+      equation_systems.add_system< LITTSystem<VerifyPennesConstantSourceTerm> > ("StateSystem") ; 
+
+  // Solve this as a time-dependent or steady system
+  state_system.time_solver =
+    AutoPtr<TimeSolver>(new SteadySolver(state_system));
+
+  // set nonlinear solver
+  state_system.time_solver->diff_solver() =
+        AutoPtr<DiffSolver>(new PetscDiffSolver(state_system));
+
+  // Initialize the system
+  equation_systems.init ();
+
+  // Set the time stepping options
+  state_system.deltat = deltat;
+
+  // setup the initial conditions
+  state_system.SetupInitialConditions();
+
+  // And the nonlinear solver options
+  DiffSolver &solver = *(state_system.time_solver->diff_solver().get());
+  solver.quiet = controlfile("solver_quiet", false);
+
+  // Print information about the system to the screen.
+  equation_systems.print_info();
+  equation_systems.parameters.print(std::cout);
+  std::cout << std::flush ; 
+
+  // write IC
+  ExodusII_IO outputfile(mesh) ;
+  std::string visfileName("femdataLinear.e");
+  outputfile.write_timestep(visfileName,equation_systems,1,0.0);
+
+  // Compare FD to Jacobian
+  // set database options to call default SNESSSolve
+  ierr = PetscOptionsClearValue("-snes_type");
+  ierr = PetscOptionsSetValue("-ksp_monitor","stdout");
+  for (unsigned int timeID = 1 ; timeID < nstep ; timeID++)
+   {
+     state_system.SetPowerID(timeID);
+     // copy global solution
+     state_system.get_vector("old_global_solution") = *state_system.solution;
+     // copy local solution
+     state_system.solution->localize(*state_system.current_local_solution);
+     state_system.get_vector("old_local_solution") = *state_system.current_local_solution;
+     state_system.solve();
+     outputfile.write_timestep(visfileName,equation_systems,timeID+1,timeID*deltat);
+   }
+
+  // All done.  
+  return ;
+}
+TEST(PennesCompareLinearNonlinear, Nonlinear) {
+
+  // Parse the input file
+  GetPot controlfile;
+
+  // Read in parameters from the input file
+  const Real deltat                    = controlfile("deltat", 1.0);
+  const unsigned int coarsegridsize    = controlfile("coarsegridsize", 1);
+  const unsigned int dim               = 3;
+  const unsigned int nstep             = 5;
+
+  // initial temp should be zero 
+  controlfile.set("initial_condition/u_init", 37.0 );
+  controlfile.set("material/rho", 1000.0 );
+  controlfile.set("material/specific_heat", 3000.0 );
+  controlfile.set("perfusion/w_0_healthy", 6.98 );
+  controlfile.set("perfusion/w_1"        , 0.21 );
+  controlfile.set("bc/u_dirichlet"       , 1    );
+
+  // set power data
+  controlfile.set("power/nsize", nstep );
+  PetscScalar ConstPowerSourceValue = 7.1e8;
+  for (unsigned int timeID = 0 ; timeID < nstep ; timeID++)
+     {
+       std::ostringstream variableName; 
+       variableName << "power/power["<< timeID << "]" ;
+       controlfile.set(variableName.str(), ConstPowerSourceValue  );
+     }
+
+  // Create a mesh.
+  Mesh mesh(dim);
+  
+  // generate mesh w/ BC
+  std::vector<int> boundaryData(6,2);
+  boundaryData[4] = 1;
+  PetscErrorCode ierr = GenerateStructuredGrid(  mesh,
+                                                 100.0*coarsegridsize,
+                                                      coarsegridsize,
+                                                      coarsegridsize,
+                                                 0., .10,
+                                                 0., .01,
+                                                 0., .01,
+                                                 boundaryData) ;
+
+  // Print information about the mesh to the screen.
+  mesh.print_info();
+
+  // Create an equation systems object.
+  EquationSystems equation_systems (mesh);
+
+  // Declare the system and its variables.
+  // To refer to typedefs in the fixture, add the 'typename TestFixture::'
+  // prefix.  The 'typename' is required to satisfy the compiler.
+  equation_systems.parameters.set<GetPot*>("controlfile") = &controlfile;
+
+  LITTSystem<VerifyPennesConstantSourceTerm>  &state_system = 
+      equation_systems.add_system< LITTSystem<VerifyPennesConstantSourceTerm> > ("StateSystem") ; 
+
+  // Solve this as a time-dependent or steady system
+  state_system.time_solver =
+    AutoPtr<TimeSolver>(new SteadySolver(state_system));
+
+  // set nonlinear solver
+  state_system.time_solver->diff_solver() =
+        AutoPtr<DiffSolver>(new PetscDiffSolver(state_system));
+
+  // Initialize the system
+  equation_systems.init ();
+
+  // Set the time stepping options
+  state_system.deltat = deltat;
+
+  // setup the initial conditions
+  state_system.SetupInitialConditions();
+
+  // And the nonlinear solver options
+  DiffSolver &solver = *(state_system.time_solver->diff_solver().get());
+  solver.quiet = controlfile("solver_quiet", false);
+
+  // Print information about the system to the screen.
+  equation_systems.print_info();
+  equation_systems.parameters.print(std::cout);
+  std::cout << std::flush ; 
+
+  // write IC
+  ExodusII_IO outputfile(mesh) ;
+  std::string visfileName("femdataNonlinear.e");
+  outputfile.write_timestep(visfileName,equation_systems,1,0.0);
+
+  // Compare FD to Jacobian
+  // set database options to call default SNESSSolve
+  ierr = PetscOptionsClearValue("-snes_type");
+  ierr = PetscOptionsSetValue("-ksp_monitor","stdout");
+  for (unsigned int timeID = 1 ; timeID < nstep ; timeID++)
+   {
+     state_system.SetPowerID(timeID);
+     // copy global solution
+     state_system.get_vector("old_global_solution") = *state_system.solution;
+     // copy local solution
+     state_system.solution->localize(*state_system.current_local_solution);
+     state_system.get_vector("old_local_solution") = *state_system.current_local_solution;
+     state_system.solve();
+     outputfile.write_timestep(visfileName,equation_systems,timeID+1,timeID*deltat);
+   }
+
+  // All done.  
+  return ;
+}
+// main tests
 int main(int argc, char** argv) {
   // This allows the user to override the flag on the command line.
   ::testing::InitGoogleTest(&argc, argv);
