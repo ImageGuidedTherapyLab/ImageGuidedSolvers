@@ -362,19 +362,37 @@ SetupInitialConditions ()
     this->solution->close();
   } // end loop over subdomains    
 
- // copy to old data structures
- this->get_vector("old_global_solution") = *this->solution;
+  // copy to old data structures
+  this->get_vector("old_global_solution") = *this->solution;
 
- // copy parallel data structures to local data structures
- this->solution->localize(*this->current_local_solution);
+  // copy parallel data structures to local data structures
+  this->solution->localize(*this->current_local_solution);
 
- // setup scatter context to subvector of variables 
- this->SetupSubVector();
+  // setup scatter context to subvector of variables 
+  this->SetupSubVector();
 
- // setup dirichlet nodes
- this->SetupDirichlet(mesh);
- 
- PetscFunctionReturnVoid();
+  // setup dirichlet nodes
+  this->SetupDirichlet(mesh);
+  
+  // **FIX Non zero Pattern of the Jacobian**
+  // build jacobian once and set nonzeros
+  this->FEMSystem::assembly(false,true);
+  // make sure matrix is closed
+  this->matrix->close();
+  PetscMatrix<Number> &matrix =
+      *(libmesh_cast_ptr<PetscMatrix<Number>*>(this->matrix));
+  /*
+     Tell the matrix we will never add a new nonzero location to the
+     matrix. If we do, it will generate an error.
+  */
+  PetscPrintf(PETSC_COMM_WORLD,"ThermalTherapySystem::SetupInitialConditions fixing nonzero jacobian structure on first solve...\n\n\n" );
+
+  MatSetOption(matrix.mat(),MAT_NEW_NONZERO_LOCATION_ERR,PETSC_TRUE);
+  // indicates when MatZeroRows() is called the zeroed entries
+  // are kept in the nonzero structure
+  MatSetOption(matrix.mat(),MAT_KEEP_NONZERO_PATTERN    ,PETSC_TRUE);
+
+  PetscFunctionReturnVoid();
 }
 
 // boundary conditions

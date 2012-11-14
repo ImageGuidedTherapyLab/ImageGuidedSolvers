@@ -14,6 +14,7 @@
 #include "steady_solver.h"
 #include "petsc_diff_solver.h"
 #include "petsc_vector.h"
+#include "petsc_matrix.h"
 #include "mesh_function.h"
 #include "point_locator_base.h"
 //local

@@ -49,6 +49,7 @@
 #include "getpot.h"
 #include "exact_solution.h"
 #include "steady_solver.h"
+#include "petsc_matrix.h" // define petsc version PETSC_VERSION_LESS_THAN
 #include "petsc_diff_solver.h"
 //local
 #include "tttkUtilities.h"
@@ -535,6 +536,8 @@ TEST(PennesExponentialSourceTerm, NeumannBC) {
   state_system.deltat = deltat;
 
   // setup the initial conditions
+  equation_systems.parameters.set<PetscScalar>("time")  = 0.0; 
+  equation_systems.parameters.set<PetscScalar>("timePrev")  = 0.0;
   state_system.SetupInitialConditions();
 
   // And the nonlinear solver options
@@ -546,7 +549,6 @@ TEST(PennesExponentialSourceTerm, NeumannBC) {
   equation_systems.parameters.print(std::cout);
   std::cout << std::flush ; 
 
-  equation_systems.parameters.set<PetscScalar>("time")  = 0.0; 
   exactState_system.project_solution(PennesExponentialSourceExactSolution,NULL,
                                      equation_systems.parameters);
   // write IC
@@ -824,17 +826,22 @@ TEST(PennesCompareLinearNonlinear, Linear) {
   // Create a mesh.
   Mesh mesh(dim);
   
+  // allow resolution input from cmd line
+  PetscErrorCode ierr;
+  PetscInt  resolution=100; // default to 100
+  ierr = PetscOptionsGetInt(PETSC_NULL,"-resolution",&resolution,PETSC_NULL); CHKERRV(ierr);
+
   // generate mesh w/ BC
   std::vector<int> boundaryData(6,2);
   boundaryData[4] = 1;
-  PetscErrorCode ierr = GenerateStructuredGrid(  mesh,
-                                                 100.0*coarsegridsize,
-                                                      coarsegridsize,
-                                                      coarsegridsize,
-                                                 0., .10,
-                                                 0., .01,
-                                                 0., .01,
-                                                 boundaryData) ;
+  ierr = GenerateStructuredGrid(  mesh,
+                                  resolution*coarsegridsize,
+                                             coarsegridsize,
+                                             coarsegridsize,
+                                  0., .10,
+                                  0., .01,
+                                  0., .01,
+                                  boundaryData) ;
 
   // Print information about the mesh to the screen.
   mesh.print_info();
@@ -932,17 +939,22 @@ TEST(PennesCompareLinearNonlinear, Nonlinear) {
   // Create a mesh.
   Mesh mesh(dim);
   
+  // allow resolution input from cmd line
+  PetscErrorCode ierr;
+  PetscInt  resolution=100; // default to 100
+  ierr = PetscOptionsGetInt(PETSC_NULL,"-resolution",&resolution,PETSC_NULL); CHKERRV(ierr);
+
   // generate mesh w/ BC
   std::vector<int> boundaryData(6,2);
   boundaryData[4] = 1;
-  PetscErrorCode ierr = GenerateStructuredGrid(  mesh,
-                                                 100.0*coarsegridsize,
-                                                      coarsegridsize,
-                                                      coarsegridsize,
-                                                 0., .10,
-                                                 0., .01,
-                                                 0., .01,
-                                                 boundaryData) ;
+  ierr = GenerateStructuredGrid(  mesh,
+                                  resolution*coarsegridsize,
+                                             coarsegridsize,
+                                             coarsegridsize,
+                                  0., .10,
+                                  0., .01,
+                                  0., .01,
+                                  boundaryData) ;
 
   // Print information about the mesh to the screen.
   mesh.print_info();

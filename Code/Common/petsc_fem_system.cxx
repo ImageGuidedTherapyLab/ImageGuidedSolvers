@@ -314,7 +314,6 @@ void PetscFEMSystem::assembly(bool get_residual, bool get_jacobian)
     PetscLogEventEnd(  PetscFEMSysLogDefault,0,0,0,0); // log default
    }
 
-
  // apply dirichlet data if any
  for( unsigned int i_var = 0 ; i_var < this->n_vars() ; i_var++)
   {
