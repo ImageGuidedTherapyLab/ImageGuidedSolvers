@@ -135,7 +135,11 @@ def pennesModeling(**kwargs):
 
   femMesh.SetupStructuredGrid(nelemROI,xbounds,ybounds,zbounds,
                               [2,2,2,2,2,2]) 
-  MeshOutputFile = "fem.e"
+  # get output file name else set default name
+  try:
+    MeshOutputFile = config.get("exec","exodus_file" )
+  except ConfigParser.NoOptionError:
+    MeshOutputFile = "fem.e"
 
   # add the data structures for the Background System Solve
   # set deltat, number of time steps, power profile, and add system
