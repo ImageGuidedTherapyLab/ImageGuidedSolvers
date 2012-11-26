@@ -69,9 +69,9 @@ struct StarStencil
 	{
 		/* f = (2*u_i - u_(i+1) - u_(i-1))/h - h*exp(u_i) */
 	     thrust::get<0>(t) = 1;
-             PetscInt Iz =  thrust::get<2>(t)/m_ym/m_xm;
-             PetscInt Iy = (thrust::get<2>(t)-Iz*m_ym*m_xm)/m_xm;
-             PetscInt Ix = (thrust::get<2>(t)-Iz*m_ym*m_xm- Iy*m_xm);
+             PetscInt Iz =  thrust::get<1>(t)/m_ym/m_xm;
+             PetscInt Iy = (thrust::get<1>(t)-Iz*m_ym*m_xm)/m_xm;
+             PetscInt Ix = (thrust::get<1>(t)-Iz*m_ym*m_xm- Iy*m_xm);
              PetscScalar sc      = m_hx*m_hz*m_hy;
              PetscScalar hxhzdhy = m_hx*m_hz/m_hy;
              PetscScalar hyhzdhx = m_hy*m_hz/m_hx;
@@ -79,7 +79,8 @@ struct StarStencil
              PetscScalar two     = 2.0;
              // print launch parameters and dbg info
              // printf("rank=%d device=%d blockDim=(%d,%d,%d) gridDim=(%d,%d,%d) warpSize=%d blockIdx=(%d,%d,%d) threadIdx=(%d,%d,%d) size=(%d,%d,%d) globalID=%d index=(%d,%d,%d)\n",m_rank,m_deviceNum,blockDim.x, blockDim.y, blockDim.z, gridDim.x, gridDim.y, gridDim.z, warpSize,blockIdx.x,blockIdx.y,blockIdx.z,threadIdx.x,threadIdx.y,threadIdx.z,m_xm,m_ym,m_zm,thrust::get<8>(t),Ix,Iy,Iz);
-             PetscScalar u_val       = thrust::get<0>(thrust::get<1>(t)) ;//1  u(i  ,j  ,k  )
+             PetscScalar u_val       = thrust::get<0>(thrust::get<2>(t)) ;//1  u(i  ,j  ,k  )
+             PetscScalar perfusion   = thrust::get<0>(thrust::get<3>(t)) ;//perfusion
              if (
                  Ix > 0  && Ix < m_xm-1
                          &&
@@ -88,12 +89,12 @@ struct StarStencil
                  Iz > 0  && Iz < m_zm-1
                 ) {
                // decode the tuple
-               PetscScalar u_east      = thrust::get<1>(thrust::get<1>(t));//2  u(i+1,j  ,k  )
-               PetscScalar u_west      = thrust::get<2>(thrust::get<1>(t));//3  u(i-1,j  ,k  )
-               PetscScalar u_north     = thrust::get<3>(thrust::get<1>(t));//4  u(i  ,j+1,k  )
-               PetscScalar u_south     = thrust::get<4>(thrust::get<1>(t));//5  u(i  ,j-1,k  )
-               PetscScalar u_up        = thrust::get<5>(thrust::get<1>(t));//6  u(i  ,j  ,k+1)
-               PetscScalar u_down      = thrust::get<6>(thrust::get<1>(t));//7  u(i  ,j  ,k-1)
+               PetscScalar u_east      = thrust::get<1>(thrust::get<2>(t));//2  u(i+1,j  ,k  )
+               PetscScalar u_west      = thrust::get<2>(thrust::get<2>(t));//3  u(i-1,j  ,k  )
+               PetscScalar u_north     = thrust::get<3>(thrust::get<2>(t));//4  u(i  ,j+1,k  )
+               PetscScalar u_south     = thrust::get<4>(thrust::get<2>(t));//5  u(i  ,j-1,k  )
+               PetscScalar u_up        = thrust::get<5>(thrust::get<2>(t));//6  u(i  ,j  ,k+1)
+               PetscScalar u_down      = thrust::get<6>(thrust::get<2>(t));//7  u(i  ,j  ,k-1)
                PetscScalar u_xx        = (-u_east  + two*u_val - u_west )*hyhzdhx;
                PetscScalar u_yy        = (-u_north + two*u_val - u_south)*hxhzdhy;
                PetscScalar u_zz        = (-u_up    + two*u_val - u_down )*hxhydhz;
@@ -263,6 +264,14 @@ int main(int argc,char **argv)
 }
 
 
+// gNek is really lightweight - and the input requirements are clearly defined.
+// Feed us mesh vertex coordinates, the element-vertex connectivity, the 
+// element boundary conditions and the material parameters and we can
+// feed back a solution. This can even be done through cubit or gmsh files [ I think ].
+// 
+// I have to say that GPU compute is pretty much all or nothing - we also try to 
+// avoid too much traffic between host and device. However, we do the 
+// preprocessing on the host as this is usually a sub-dominant cost.
 PetscErrorCode ComputeFunction(SNES snes,Vec u,Vec f,void *ctx) 
 {
   PetscInt       i,j,k;
@@ -306,6 +315,7 @@ PetscErrorCode ComputeFunction(SNES snes,Vec u,Vec f,void *ctx)
 		       thrust::make_zip_iterator(
 						 thrust::make_tuple(
             farray->begin(),                              //0
+            thrust::counting_iterator<int>(fstart) ,       //1
 		       thrust::make_zip_iterator(
 						 thrust::make_tuple(
             uarray->begin()+ustartshift,                  //1  u(i  ,j  ,k  )
@@ -316,23 +326,35 @@ PetscErrorCode ComputeFunction(SNES snes,Vec u,Vec f,void *ctx)
             uarray->begin()+ustartshift + zoffset,        //6  u(i  ,j  ,k+1)
             uarray->begin()+ustartshift - zoffset         //7  u(i  ,j  ,k-1)
                                                                     )), 
-            thrust::counting_iterator<int>(fstart)        //8
+		       thrust::make_zip_iterator(
+						 thrust::make_tuple(
+            thrust::constant_iterator<PetscScalar>(6.0  ),//0  perfusion
+            thrust::constant_iterator<PetscScalar>(0.57 ),//1  conduction
+            thrust::constant_iterator<PetscScalar>(5.e2 ),//2  scattering
+            thrust::constant_iterator<PetscScalar>(14.e3) //3  absorption
+                                                                    )) 
                                                                     )), 
 		       thrust::make_zip_iterator(
 						 thrust::make_tuple(
-            farray->end(),                            //0
-            //farray->begin()+10,                            //0
+            farray->end(),                                            //0
+            thrust::counting_iterator<int>(fstart) + u->map->n ,      //1
 		       thrust::make_zip_iterator(
 						 thrust::make_tuple(
-            uarray->end()+uendshift,                  //1  u(i  ,j  ,k  )
-            uarray->end()+uendshift + xoffset,        //2  u(i+1,j  ,k  )
-            uarray->end()+uendshift - xoffset,        //3  u(i-1,j  ,k  )
-            uarray->end()+uendshift + yoffset,        //4  u(i  ,j+1,k  )
-            uarray->end()+uendshift - yoffset,        //5  u(i  ,j-1,k  )
-            uarray->end()+uendshift + zoffset,        //6  u(i  ,j  ,k+1)
-            uarray->end()+uendshift - zoffset         //7  u(i  ,j  ,k-1)
+            uarray->end()+uendshift,                  //2_0  u(i  ,j  ,k  )
+            uarray->end()+uendshift + xoffset,        //2_1  u(i+1,j  ,k  )
+            uarray->end()+uendshift - xoffset,        //2_2  u(i-1,j  ,k  )
+            uarray->end()+uendshift + yoffset,        //2_3  u(i  ,j+1,k  )
+            uarray->end()+uendshift - yoffset,        //2_4  u(i  ,j-1,k  )
+            uarray->end()+uendshift + zoffset,        //2_5  u(i  ,j  ,k+1)
+            uarray->end()+uendshift - zoffset         //2_6  u(i  ,j  ,k-1)
                                                                     )), 
-            thrust::counting_iterator<int>(fstart) + u->map->n        //8
+		       thrust::make_zip_iterator(
+						 thrust::make_tuple(
+            thrust::constant_iterator<PetscScalar>(6.0  ),//3_0  perfusion
+            thrust::constant_iterator<PetscScalar>(0.57 ),//3_1  conduction
+            thrust::constant_iterator<PetscScalar>(5.e2 ),//3_2  scattering
+            thrust::constant_iterator<PetscScalar>(14.e3) //3_3  absorption
+                                                                    ))  
                                                                     )),
 		       *stencil_op);
       

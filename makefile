@@ -27,7 +27,7 @@ all:
 
 ####### BASE PETSC  INCLUDE FILES are included in TAO base files
 include ${PETSC_DIR}/conf/variables
-include ${DDDAS_SRC}/conf/variables
+include ${IGS_SRC}/conf/variables
 
 #If you wish to eliminate the default known suffixes instead of just adding to them, write a rule for .SUFFIXES with no prerequisites. By special dispensation, this eliminates all existing prerequisites of .SUFFIXES. You can then write another rule to add the suffixes you want. For example,
 #.SUFFIXES:            # Delete the default suffixes
@@ -208,8 +208,8 @@ sep_tags: dddas_tags  itk_tags  libmesh_tags  mpi_petsc_tao_tags
 	@echo "in vim  "
 	@echo "       :set tags=<file>"
 
-dddas_tags: 
-	ctags -f dddas_tags -R -h +.blk --langmap=fortran:+.blk.FPP --langmap=c++:+.txx --languages=c,c++,fortran --regex-fortran=/MPI_HEXas/MPI_HEXAS/ --regex-fortran=/MPI_GMVVERTex/MPI_GMVVERTEX/ --regex-fortran=/MPI_CELLINfo/MPI_CELLINFO/ --regex-fortran=/MPI_NODVar/MPI_NODVAR/ $(DDDAS_SRC) 
+igs_tags: 
+	ctags -f igs_tags -R -h +.blk --langmap=fortran:+.blk.FPP --langmap=c++:+.txx --languages=c,c++,fortran --regex-fortran=/MPI_HEXas/MPI_HEXAS/ --regex-fortran=/MPI_GMVVERTex/MPI_GMVVERTEX/ --regex-fortran=/MPI_CELLINfo/MPI_CELLINFO/ --regex-fortran=/MPI_NODVar/MPI_NODVAR/ .
 
 itk_tags: 
 	ctags -f itk_tags -R -h +.blk --langmap=fortran:+.blk.FPP --langmap=c++:+.txx --languages=c,c++,fortran  $(ITK_SOURCE) 
