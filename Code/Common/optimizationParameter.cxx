@@ -17,17 +17,19 @@
 #include "boundary_info.h"
 #include "mesh.h"
 
+// libmesh includes
+#include "numeric_vector.h"
+#include "dense_vector.h"
 
 // pdeopt
 #include "optimizationParameter.h"
-#include "thermal_therapy_system.h"
-#include "pdeBaseClass.h"
 
 
 /* --------------------- base class constructor -------------------------- */
 optimizationParameter::optimizationParameter(const char *parameterName,
-                       bool optimize, dpde_dmMemFn dpde_dmMemberFunctor,
-                       d2pde_dudmMemFn  d2pde_dudumMemberFunctor,
+                       bool optimize, 
+                       //dpde_dmMemFn dpde_dmMemberFunctor,
+                       //d2pde_dudmMemFn  d2pde_dudumMemberFunctor,
                        PetscScalar lb, PetscScalar ub,
                        PetscScalar perturbation, 
                        PetscScalar verifparam):_name(parameterName)
@@ -36,9 +38,9 @@ optimizationParameter::optimizationParameter(const char *parameterName,
     spatial_field = false;
     //dqoi_dm       = &qoiBaseClass::dqoi_dm;
     dqoi_dm       = NULL; 
-    dpde_dm       = dpde_dmMemberFunctor;
-    d2qoi_du_dm   = &PDEModelBaseClass::d2qoi_du_dm; 
-    d2pde_du_dm   = d2pde_dudumMemberFunctor;
+    dpde_dm       = NULL; //dpde_dmMemberFunctor;
+    d2qoi_du_dm   = NULL; //&PDEModelBaseClass::d2qoi_du_dm; 
+    d2pde_du_dm   = NULL; //d2pde_dudumMemberFunctor;
     Optimize      = optimize;
     _verifparam   = verifparam;
     _perturbation  = perturbation;
@@ -50,12 +52,14 @@ optimizationParameter::optimizationParameter(const char *parameterName,
 /* --------------------- constructor -------------------------- */
 spatialParameter::spatialParameter( const char *parameterName,
            EquationSystems &,
-           bool opt, dpde_dmMemFn dpde_dmMemberFunctor,
-           d2pde_dudmMemFn  d2pde_dudumMemberFunctor,
+           bool opt, 
+           //dpde_dmMemFn dpde_dmMemberFunctor,
+           //d2pde_dudmMemFn  d2pde_dudumMemberFunctor,
            PetscScalar lb, PetscScalar ub,
            PetscScalar perturbation, PetscScalar verifparam, bool field )
-           : optimizationParameter(parameterName,opt,dpde_dmMemberFunctor,
-                                   d2pde_dudumMemberFunctor,
+           : optimizationParameter(parameterName,opt,
+                                   //dpde_dmMemberFunctor,
+                                   //d2pde_dudumMemberFunctor,
                                    lb,ub, perturbation,verifparam)
 {
     // initialize pointer to data
@@ -73,12 +77,14 @@ spatialParameter::~spatialParameter()
 }
 /* ------------------------------------------------------------------- */
 discreteParameter::discreteParameter( const char *parameterName,
-           bool opt, dpde_dmMemFn dpde_dmMemberFunctor,
-           d2pde_dudmMemFn  d2pde_dudumMemberFunctor,
+           bool opt, 
+           //dpde_dmMemFn dpde_dmMemberFunctor,
+           //d2pde_dudmMemFn  d2pde_dudumMemberFunctor,
            PetscScalar lb, PetscScalar ub,
            PetscScalar perturbation, PetscScalar verifparam)
-           : optimizationParameter(parameterName,opt,dpde_dmMemberFunctor,
-                                   d2pde_dudumMemberFunctor,
+           : optimizationParameter(parameterName,opt,
+                                   //dpde_dmMemberFunctor,
+                                   //d2pde_dudumMemberFunctor,
                                    lb,ub, perturbation,verifparam),
              _value()
 {

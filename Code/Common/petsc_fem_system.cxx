@@ -17,6 +17,7 @@
 //local
 #include "optimizationParameter.h" 
 #include "petsc_fem_system.h"
+#include "fem_context.h"
 
 /* ------------------------------------------------------------ */
 // PetscFEMSystem implementation
@@ -46,6 +47,23 @@ PetscFEMSystem::PetscFEMSystem (EquationSystems& es,
   PetscLogEventRegister("PetscFEMSysResidual",PETSC_VIEWER_COOKIE,&PetscFEMSysLogResidual);
   PetscLogEventRegister("PetscFEMSysJacobian",PETSC_VIEWER_COOKIE,&PetscFEMSysLogJacobian);
   PetscLogEventRegister("PetscFEMSysDefault" ,PETSC_VIEWER_COOKIE,&PetscFEMSysLogDefault );
+
+  // # of mesh blocks
+  n_block=1;  
+  libMesh::MeshBase &mesh = es.get_mesh();
+  libMesh::MeshBase::const_element_iterator       global_el   = mesh.elements_begin();
+  const libMesh::MeshBase::const_element_iterator global_el_end = mesh.elements_end();
+
+  for (  ; global_el != global_el_end ; ++global_el  )
+    {
+      // Store a pointer to the element we are currently
+      // working on.  This allows for nicer syntax later.
+      Elem* elem = *global_el;
+
+      // find the largest domain
+      if( elem->subdomain_id() > n_block ) n_block = elem->subdomain_id();
+    }
+
 }
 
 /* ------------------------------------------------------------ */
@@ -611,17 +629,6 @@ void PetscFEMSystem::SetSubVector (Vec &SubVector,int VarID)
 
   PetscFunctionReturnVoid();
 }
-/* ------------------------------------------------------------ */
-#undef __FUNCT__
-#define __FUNCT__ "PetscFEMSystem::build_context"
-AutoPtr<DiffContext> PetscFEMSystem::build_context ()
-{
-  AutoPtr<DiffContext> ap(new PetscFEMContext(*this));
-
-  ap->set_deltat_pointer( &deltat );
-  
-  return ap;
-}
 
 void PetscFEMSystem::init_data ()
 {
@@ -649,7 +656,7 @@ void PetscFEMSystem::init_data ()
 // boundary conditions
 bool PetscFEMSystem::side_time_derivative(bool request_jacobian,DiffContext &context)
 {
-  PetscFEMContext &c = libmesh_cast_ref<PetscFEMContext&>(context);
+  FEMContext &c = libmesh_cast_ref<FEMContext&>(context);
 
   // get the number of variable in the state system
   const unsigned int n_vars = this->n_vars();
@@ -675,15 +682,12 @@ bool PetscFEMSystem::side_time_derivative(bool request_jacobian,DiffContext &con
 
   for (unsigned int qp=0; qp != n_sidepoints; qp++)
     {
-      // Compute the solution at the theta timestep
-      this->UpdateBoundaryData(c,qp);
-
       // loop over variables and compute diagonal terms only
       // derive classes call this for off diag terms 
       for( unsigned int var = 0 ; var < n_vars ; var++)
         { 
         // Compute the solution at the theta timestep
-        Number u_theta  = c.side_theta_value(var, qp);
+        Number u_theta  = c.side_value(var, qp);
 
         // residual and jacobian for this variable
         DenseSubMatrix<Number> &Kuu = *c.elem_subjacobians[var][var];
@@ -708,6 +712,11 @@ bool PetscFEMSystem::side_time_derivative(bool request_jacobian,DiffContext &con
           this->get_mesh().boundary_info->boundary_id(c.elem, c.side);
         libmesh_assert (bc_id != BoundaryInfo::invalid_id);
 
+        // Compute the solution at the theta timestep
+        this->UpdateBoundaryData(c,qp,
+                                 field_id , this->m_PowerID,
+                                 qpoint[qp], es.parameters) ;
+
         for (unsigned int i=0; i != n_dofs; i++)
           {
             Fu(i) += JxW_side[qp] * phi_side[i][qp] *
@@ -719,8 +728,7 @@ bool PetscFEMSystem::side_time_derivative(bool request_jacobian,DiffContext &con
                 {
                   Kuu(i,j) += JxW_side[qp] * phi_side[i][qp] * phi_side[j][qp] *
                               // add bc to jacobian
-                     CALL_MEMBER_FN(this, this->JacobianBC[bc_id][var])(var) 
-		          * c.ThetaValue(var) ;
+                     CALL_MEMBER_FN(this, this->JacobianBC[bc_id][var])(var) ;
                 }
           }
       } // end loop over variables

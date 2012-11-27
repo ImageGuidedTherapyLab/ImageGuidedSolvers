@@ -137,12 +137,12 @@ source_files = ["Code/Common/wrapfemInterface.pyx",
                 "Code/Common/tttkUtilities.cxx",
                 "Code/Common/itkVTKImageVariableNameIO.cxx",
                # "Code/Common/pdeBaseClass.cxx",
-                "Code/Common/petsc_fem_context.cxx",
+               # "Code/Common/petsc_fem_context.cxx",
                 "Code/TreatmentPlanning/pennesModel.cxx",
                 "Code/TreatmentPlanning/pennesSystem.cxx",
-                "Code/ModelAssistedMonitoring/BackgroundPhase.cxx",
-                "Code/ModelAssistedMonitoring/KalmanFilter.cxx",
-                "Code/ModelAssistedMonitoring/Imaging.cxx",
+                #"Code/ModelAssistedMonitoring/BackgroundPhase.cxx",
+                #"Code/ModelAssistedMonitoring/KalmanFilter.cxx",
+                "Code/ModelAssistedMonitoring/Imaging.cxx"
                ]
 dependency_files = list( source_files) # copy
 dependency_files.extend(
@@ -150,15 +150,15 @@ dependency_files.extend(
                 "Code/Common/optimizationParameter.h",
                 "Code/Common/tttkUtilities.h",
                 "Code/Common/itkVTKImageVariableNameIO.h",
-                "Code/Common/pdeBaseClass.h",
-                "Code/Common/petsc_fem_context.h",
+                #"Code/Common/pdeBaseClass.h",
+                #"Code/Common/petsc_fem_context.h",
                 "Code/Common/petsc_fem_system.h",
                 "Code/Common/thermal_therapy_system.h",
                 "Code/TreatmentPlanning/pennesModel.h",
                 "Code/TreatmentPlanning/pennesSystem.h",
-                "Code/ModelAssistedMonitoring/BackgroundPhase.h",
-                "Code/ModelAssistedMonitoring/KalmanFilter.h",
-                "Code/ModelAssistedMonitoring/Imaging.h",
+                #"Code/ModelAssistedMonitoring/BackgroundPhase.h",
+                #"Code/ModelAssistedMonitoring/KalmanFilter.h",
+                "Code/ModelAssistedMonitoring/Imaging.h"
                ] )  # header filenames
 print source_files
 ext_modules_list=[

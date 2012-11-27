@@ -6,7 +6,10 @@
 // libmesh includes
 #include "numeric_vector.h"
 #include "fem_system.h"
-#include "petsc_fem_context.h" 
+#include "getpot.h"
+
+// local includes
+#include "tttkUtilities.h"
 
 class optimizationParameter; //forward declaration
 #define CALL_MEMBER_FN(object,ptrToMember)  ((object)->*(ptrToMember))
@@ -90,6 +93,65 @@ public:
   /** initial condition function pointers */
   std::vector<ICMemFn>  InitValues;
  
+  /** voltage initial condition. overwritten in derived class*/
+  virtual PetscScalar getInitialVoltage(unsigned int,unsigned int,
+                                        const Point&,const Parameters& )
+       {
+         libmesh_error();return 0.0;
+       }
+  /** temperature initial condition. overwritten in derived class*/
+  virtual PetscScalar getInitialTemperature(unsigned int,unsigned int, 
+                                            const Point&  , const Parameters& )
+       {
+         libmesh_error();return 0.0;
+       }
+
+  /** initial damage */
+  virtual PetscScalar getInitialDamage(unsigned int,unsigned int,
+                                       const Point&,const Parameters& )
+       {
+         return 0.0;
+       }
+ 
+  /** fluence initial condition. overwritten in derived class*/
+  virtual PetscScalar getInitialFluence(unsigned int,unsigned int, 
+                                            const Point&  , const Parameters& )
+       {
+         return 0.0;
+       }
+
+  /** flux initial condition. overwritten in derived class*/
+  virtual PetscScalar getExternalFlux_X(unsigned int,unsigned int, 
+                                      const Point&  , const Parameters& )
+       { libmesh_error();return 0.0; }
+  virtual PetscScalar getExternalFlux_Y(unsigned int,unsigned int, 
+                                      const Point&  , const Parameters& )
+       { libmesh_error();return 0.0; }
+  virtual PetscScalar getExternalFlux_Z(unsigned int,unsigned int, 
+                                      const Point&  , const Parameters& )
+       { libmesh_error();return 0.0; }
+  /** flux initial condition. overwritten in derived class*/
+  virtual PetscScalar getInterstitialFlux_X(unsigned int,unsigned int, 
+                                          const Point&,const Parameters& )
+       { libmesh_error();return 0.0; }
+  virtual PetscScalar getInterstitialFlux_Y(unsigned int,unsigned int, 
+                                          const Point&,const Parameters& )
+       { libmesh_error();return 0.0; }
+  virtual PetscScalar getInterstitialFlux_Z(unsigned int,unsigned int, 
+                                          const Point&,const Parameters& )
+       { libmesh_error();return 0.0; }
+  /** flux initial condition. overwritten in derived class*/
+  virtual PetscScalar getExternalIrradiance(unsigned int,unsigned int, 
+                                            const Point&  , const Parameters& )
+       {
+         libmesh_error();return 0.0;
+       }
+  /** flux initial condition. overwritten in derived class*/
+  virtual PetscScalar getInterstitialIrradiance(unsigned int,unsigned int, 
+                                            const Point&  , const Parameters& )
+       {
+         libmesh_error();return 0.0;
+       }
   /**
    * setup dirichlet data
    */
@@ -99,16 +161,6 @@ public:
    * setup intial conditions 
    */
   virtual void SetupInitialConditions ();
-
-  /**
-   * Builds a FEMContext object with enough information to do
-   * evaluations on each element.
-   *
-   * For most problems, the default FEMSystem implementation is correct; users
-   * who subclass FEMContext will need to also reimplement this method to build
-   * it.
-   */
-  virtual AutoPtr<DiffContext> build_context();
 
   //-----------------------------------------------------------------
   // access to the solution data fields
@@ -182,14 +234,16 @@ public:
    } 
   virtual void printSelf(std::ostream& os)
     { 
+      os << "PetscFEMSystem:  linearPDE          =" << m_LinearPDE        << std::endl;
       os << "PetscFEMSystem:  m_LinearSolve      =" << m_LinearSolve      << std::endl;
       os << "PetscFEMSystem:  m_MassMatrix       =" << m_MassMatrix       << std::endl;
       os << "PetscFEMSystem:  m_StiffnessMatrix  =" << m_StiffnessMatrix  << std::endl;
       os << "PetscFEMSystem:  m_jacobianComputed =" << m_jacobianComputed << std::endl;
+      printStdVector< Real >(os, "PDE.m_newton_coeff[", m_newton_coeff );
+      printStdVector< Real >(os, "PDE.m_u_infty["     , m_u_infty      );
+      printStdVector< Real >(os, "PDE.m_NeumannFlux[" , m_NeumannFlux  );
       return; 
     }
-
-  PetscInt    get_num_elem_blk(){     return n_block ; }
 
   virtual void ScatterParametersLocally() = 0 ; 
   // member function pointers for boundary conditions
@@ -209,12 +263,43 @@ public:
   
   /// BC computes diagonal terms only, off diag terms computed in derived class
   bool side_time_derivative(bool request_jacobian,DiffContext &context);
+
+  // return true if this is a linear solve
+  PetscTruth  LinearPDE()
+         {return m_LinearPDE;}
+
+  //boundary conditions  can be overridden in derived class if necessary
+  // the member function pointer will call the derived class function
+  virtual PetscScalar residualNothingBC(const unsigned int ,const Real &,
+                                        int , const int ,
+                                        const Point &, const Parameters& )
+    { return 0.0; }
+  virtual PetscScalar residualNeumannBC(const unsigned int i_var,const Real &,
+                                        int , const int ,
+                                        const Point & , const Parameters&)
+    { return m_NeumannFlux[i_var]; }
+  /**
+   * Cauchy boundary data for each variable
+   * \f[
+   *    h(u - u_\infty)
+   * \f]
+   */
+  virtual PetscScalar residualCauchyBC( const unsigned int i_var, const Real &temperature,
+                                        int , const int ,
+                                        const Point & , const Parameters& )
+    { return m_newton_coeff[i_var]*(temperature-m_u_infty[i_var]) ; }
+
+  virtual PetscScalar jacobianNothingBC(const unsigned int , int,
+                                        const Point & , const Parameters& )
+    { return 0.0; }
+  virtual PetscScalar jacobianCauchyBC(const unsigned int i_var, int,
+                                       const Point &, const Parameters& )
+    { return m_newton_coeff[i_var]; }
+  PetscInt    get_num_elem_blk(){     return n_block ; }
+
 protected:
   
   PetscInt n_block;     ///< # of mesh blocks
-
-  /// BC data does note need update by default
-  virtual void UpdateBoundaryData(PetscFEMContext &,const unsigned int){}
 
   /**
    * Initializes the member data fields associated with
@@ -237,17 +322,21 @@ protected:
               m_StiffnessMatrix  ,    ///< assemble Stiffness Matrix only
               m_jacobianComputed; ///< jacobian has been computed already
 
-/*
-  not needed??? why put solution into all vectors?
+  // dirichlet, neumann, cauchy BC Data
+  std::vector<Real>  m_newton_coeff,   ///<  \f$ h  \f$ 
+                     m_u_infty,        ///<  \f$ u_\infty  \f$ 
+                     m_NeumannFlux;    ///<  \f$ \mathcal{G}  \f$ 
 
-   * Re-update the local values when the mesh has changed.
-   * This method takes the data updated by \p update() and
-   * makes it up-to-date on the current mesh.
-  virtual void re_update ();
-   */
+  PetscTruth  m_LinearPDE;
+
 private:
- /** The type of the parent. */
- typedef FEMSystem Parent;
+  /// BC data does note need update by default
+  virtual void UpdateBoundaryData(DiffContext &,const unsigned int,
+                                  const int ,  const int ,
+                                  const Point &, const Parameters& ){}
+
+  /** The type of the parent. */
+  typedef FEMSystem Parent;
   
   // petsc profile logging tools
   PetscInt  PetscFEMSysLogResidual,

@@ -60,31 +60,6 @@ PDEModelBaseClass::PDEModelBaseClass(GetPot &controlfile,EquationSystems &es):
   accumulateGradientBC[3] = &PDEModelBaseClass::gradientCauchyBC;
   accumulateGradientBC[4] = &PDEModelBaseClass::gradientNothingBC;
 
-  // # of mesh blocks
-  n_block=1;  
-  libMesh::MeshBase &mesh = es.get_mesh();
-  libMesh::MeshBase::const_element_iterator       global_el   = mesh.elements_begin();
-  const libMesh::MeshBase::const_element_iterator global_el_end = mesh.elements_end();
-
-  for (  ; global_el != global_el_end ; ++global_el  )
-    {
-      // Store a pointer to the element we are currently
-      // working on.  This allows for nicer syntax later.
-      Elem* elem = *global_el;
-
-      // find the largest domain
-      if( elem->subdomain_id() > n_block ) n_block = elem->subdomain_id();
-    }
-
-  // default to time dependent problem
-  m_TransientDomain.resize(n_block,PETSC_TRUE);
-  for (PetscInt Ii = 0 ; Ii < this->get_num_elem_blk();Ii++)
-   {
-     OStringStream controlIDSS;
-     controlIDSS<< "steadystate/domain_" << Ii ;
-     if(controlfile(controlIDSS.str(),false))  
-               m_TransientDomain[Ii] = PETSC_FALSE;
-   }
 }
 /* -------------------------------------------------------------------- 
    Print BC
@@ -93,9 +68,6 @@ void PDEModelBaseClass::printSelf(std::ostream& os)
 {
   os << "PDE.m_TimeDerivativeScalingFactor = " 
           << m_TimeDerivativeScalingFactor << std::endl;
-  printStdVector< Real >(os, "PDE.m_newton_coeff[", m_newton_coeff );
-  printStdVector< Real >(os, "PDE.m_u_infty["     , m_u_infty      );
-  printStdVector< Real >(os, "PDE.m_NeumannFlux[" , m_NeumannFlux  );
   printStdVector< PetscTruth >(os, "PDE.m_TransientDomain[" , m_TransientDomain);
 
 }

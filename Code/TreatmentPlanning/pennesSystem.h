@@ -1,5 +1,6 @@
 #ifndef __ThermalTherapy_h
 #define __ThermalTherapy_h
+#include "petsc_fem_system.h" // Constitutive data
 /**@ingroup TreatmentPlanning 
  * This class is responsible for assembling the system dynamics matrix and load
  * vector for the LITT simulation. The actual bioheat model is templated so a
@@ -713,12 +714,20 @@
  *  * @endlatexonly
  */
 template< typename MathematicalModel  >
-class LITTSystem : public ThermalTherapySystem < MathematicalModel  >
+class BioHeatSystem : public PetscFEMSystem 
 {
-
 public:
+  /** this class holds all constitutive data.
+    * should be an instaniation of 
+    *     - PennesStandardDiffusionApproximation
+    *     - PennesVoltage 
+    *     - PennesLineSource 
+    *     - VerifySourceTerm 
+    */
+  MathematicalModel m_MathModel; 
+
   // Constructor
-  LITTSystem(EquationSystems& ,const std::string& , const unsigned int );
+  BioHeatSystem(EquationSystems& ,const std::string& , const unsigned int );
 
   /** System initialization */
   virtual void init_data ();
@@ -739,9 +748,12 @@ public:
   // Indices for temperature, damage, damage derivative; respectively
   unsigned int u_var, a_var, b_var;
 
+  // wrapper for model 
+  virtual void ScatterParametersLocally(){this->m_MathModel.ScatterParametersLocally();}
+  
 private:
   /** The type of the parent  */
-  typedef ThermalTherapySystem< MathematicalModel > Parent;
+  typedef PetscFEMSystem Parent;
   // index maps for damage 
   std::vector<unsigned int> temp_indices, damage_indices, deriv_indices ;
 };
@@ -754,7 +766,7 @@ private:
  * Reimplements the element_time_derivative for the coupled pennes RF Solve
  */
 template< typename MathematicalModel  >
-class RFASystem : public LITTSystem < MathematicalModel > 
+class RFASystem : public BioHeatSystem < MathematicalModel > 
 {
 
 public:
@@ -767,15 +779,6 @@ public:
   /** Dirichlet BC */
   virtual void ApplyDirichlet (); 
   
-  // Context initialization
-  virtual void init_context(DiffContext &context)
-   {
-    Parent::init_context(context); // call LITTSystem
-    PetscFEMContext &c = libmesh_cast_ref<PetscFEMContext&>(context);
-    // use forward euler voltage
-    c.SetThetaValue(this->z_var,1.0); 
-   }
-
   /** Assemble System Dynamics Matrix and Load Vector */
   virtual bool element_time_derivative (bool request_jacobian,
                                         DiffContext& context);
@@ -785,7 +788,7 @@ public:
 
 private:
   /** The type of the parent  */
-  typedef LITTSystem < MathematicalModel > Parent;
+  typedef BioHeatSystem < MathematicalModel > Parent;
 
   int m_ElectrodeNodeSet;
 };
@@ -797,7 +800,7 @@ private:
  * Reimplements the element_time_derivative for the coupled pennes fluence Solve
  */
 template< typename MathematicalModel  >
-class RHTESystem : public LITTSystem < MathematicalModel > 
+class RHTESystem : public BioHeatSystem < MathematicalModel > 
 {
 
 public:
@@ -822,26 +825,22 @@ public:
   // setup dirichlet
   virtual void SetupDirichlet(libMesh::MeshBase& );
 
-  // Context initialization
-  virtual void init_context(DiffContext &context)
-   {
-    Parent::init_context(context); // call LITTSystem
-    PetscFEMContext &c = libmesh_cast_ref<PetscFEMContext&>(context);
-    // use forward euler voltage
-    c.SetThetaValue(this->z_var,1.0); 
-   }
-
   unsigned int  z_var; // Indices for scattered fluence  
   unsigned int  e_var; // Indices for primary   fluence  
   unsigned int fx_var; // Indices for x-direction flux  
   unsigned int fy_var; // Indices for y-direction flux  
   unsigned int fz_var; // Indices for z-direction flux  
-
+protected:
 private:
   /** The type of the parent  */
-  typedef LITTSystem < MathematicalModel > Parent;
+  typedef BioHeatSystem < MathematicalModel > Parent;
 
   PetscTruth m_ExternalFiber;
+
+  /// BC data does note need update by default
+  virtual void UpdateBoundaryData(DiffContext &,const unsigned int ,
+                                  const int ,  const int ,
+                                  const Point &, const Parameters& );
 };
 
 #endif

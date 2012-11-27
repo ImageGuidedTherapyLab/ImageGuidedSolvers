@@ -42,10 +42,6 @@ void PennesBioheatModel::printSelf(std::ostream& os)
 {
   PetscFunctionBegin; 
 
-  // print base class info
-  this->PDEModelBaseClass::printSelf(os); 
-
-  os << "PennesModel:         linearPDE=" <<       m_LinearPDE << std::endl;
   os << "PennesModel:               w_1=" <<         w_1       << std::endl;
   os << "PennesModel:               k_1=" <<         k_1       << std::endl;
   os << "PennesModel:               rho=" <<               rho << std::endl;
@@ -79,12 +75,13 @@ void PennesBioheatModel::printSelf(std::ostream& os)
 
 // constructor
 PennesBioheatModel::PennesBioheatModel(
-  GetPot &controlfile,EquationSystems &es ) : PDEModelBaseClass(controlfile,es),
+  GetPot &controlfile,EquationSystems &es ):
+  _equation_systems(es), // store the pointer
   // thermal conductivity
   k_0( "k_0", es,
        controlfile("thermal_conductivity/k_0_optimize",  false),
-       &PDEModelBaseClass::dpde_dk_0,
-       &PDEModelBaseClass::d2pde_du_dk_0,
+       //&PDEModelBaseClass::dpde_dk_0,
+       //&PDEModelBaseClass::d2pde_du_dk_0,
        controlfile("thermal_conductivity/k_0_lb"      ,    0.10e0),
        controlfile("thermal_conductivity/k_0_ub"      ,    0.70e0),
        controlfile("thermal_conductivity/k_0_dbeta"   , std::sqrt(fdEpsilon)),
@@ -93,8 +90,8 @@ PennesBioheatModel::PennesBioheatModel(
   // perfusion
   w_0( "w_0", es,
        controlfile("perfusion/w_0_optimize",  false),
-       &PDEModelBaseClass::dpde_dw_0,
-       &PDEModelBaseClass::d2pde_du_dw_0,
+       //&PDEModelBaseClass::dpde_dw_0,
+       //&PDEModelBaseClass::d2pde_du_dw_0,
        controlfile("perfusion/w_0_lb"      ,    0.10e0),
        controlfile("perfusion/w_0_ub"      ,   90.00e0),
        controlfile("perfusion/w_0_dbeta"   , fdEpsilon), 1.0e1,
@@ -102,8 +99,8 @@ PennesBioheatModel::PennesBioheatModel(
   // applicator parameters
   Power(     "Power",
              controlfile("probe/power_optimize",  false),
-             &PDEModelBaseClass::dpde_dpow,
-             &PDEModelBaseClass::d2pde_du_dm,
+             //&PDEModelBaseClass::dpde_dpow,
+             //&PDEModelBaseClass::d2pde_du_dm,
              controlfile("probe/power_lb"      ,   0.00e0),
              controlfile("probe/power_ub"      ,  30.00e0),
              controlfile("probe/power_dbeta"   ,fdEpsilon), 18.8e0)
@@ -111,34 +108,10 @@ PennesBioheatModel::PennesBioheatModel(
   // density and specific heats
   rho= controlfile("material/rho",1.e3); // [kg/m^3]
   specific_heat= controlfile("material/specific_heat",3840.0); //[J/kg/C]
-  // use crank nicolson for temperature
-  // FIXME: will this work in multi-domain case ? 
-  // FIXME: will this work in multi-domain case ? 
-  if( this->TransientTerm(0) )  
-    {
-     PetscPrintf(PETSC_COMM_WORLD,"scale transient...\n");
-     m_TimeDerivativeScalingFactor = 1.0/rho/specific_heat;
-    }
-  else // steady state
-    {
-     PetscPrintf(PETSC_COMM_WORLD,"scale steady state...\n");
-     m_TimeDerivativeScalingFactor = 1.0;
-    }
 
   // set initial condition parameters for temperature
   m_bodyTemp     = controlfile("initial_condition/u_init",37.0);//celcius
   m_probeTemp    = controlfile("initial_condition/probe_init",21.0); 
-
-  // default initial condition is domain wise constant
-  InitValues.push_back( &PDEModelBaseClass::getInitialTemperature);
-
-  // neuman bc data
-  m_NeumannFlux.push_back( controlfile("bc/temp_flux",0.0) 
-                           * m_TimeDerivativeScalingFactor  ) ; //[J/m^2/s]  
-  // cauchy bc data
-  m_newton_coeff.push_back( controlfile("bc/newton_coeff",1.0)
-                           * m_TimeDerivativeScalingFactor  ) ; //[J/s/m^2/C] 
-  m_u_infty.push_back(  controlfile("bc/u_infty",m_bodyTemp)); // degC
 
   // initial value in healthy tissue
   es.parameters.set<PetscScalar>(   "w_0_healthy") = 
@@ -203,10 +176,6 @@ PennesBioheatModel::PennesBioheatModel(
   //              << std::endl; abort();
   //  }
 
-  // test for non linear parameters
-  if ( k_1 != 0.0 )                                          m_LinearPDE = PETSC_FALSE;
-  if ( w_1 != es.parameters.get<PetscScalar>("w_0_healthy")) m_LinearPDE = PETSC_FALSE;
-
   // clear
   m_BulkFluidFlow.clear();
   m_DiffusionDirection.clear();
@@ -230,7 +199,6 @@ PennesBioheatModel::PennesBioheatModel(
     m_BulkFluidFlow.push_back(FlowDirection);
     m_DiffusionDirection.push_back(DiffDirection);
    }
-
 
   // store a pointer to all field parameters for plotting
   _fieldParameters.push_back( &w_0  );  
@@ -317,36 +285,36 @@ PennesStandardDiffusionApproximation::PennesStandardDiffusionApproximation(
   // optical laser parameters
   mu_a_0( "mu_a", es,
         controlfile("optical/mu_a_optimize"      ,  false),
-        &PDEModelBaseClass::dpde_dmu_a,
-        &PDEModelBaseClass::d2pde_du_dm,
+        //&PDEModelBaseClass::dpde_dmu_a,
+        //&PDEModelBaseClass::d2pde_du_dm,
         controlfile("optical/mu_a_lb"            ,   00.05e2),
         controlfile("optical/mu_a_ub"            ,   400.0e2),
         controlfile("optical/mu_a_dbeta"         , fdEpsilon), 10.0e0,
         controlfile("optical/mu_a_vary"          ,   false) ),
   mu_s_0( "mu_s", es,
         controlfile("optical/mu_s_optimize"      ,  false),
-        &PDEModelBaseClass::dpde_dmu_s,
-        &PDEModelBaseClass::d2pde_du_dm,
+        //&PDEModelBaseClass::dpde_dmu_s,
+        //&PDEModelBaseClass::d2pde_du_dm,
         controlfile("optical/mu_s_lb"            , 10.000e2),
         controlfile("optical/mu_s_ub"            , 3000.0e2),
         controlfile("optical/mu_s_dbeta"         ,fdEpsilon), 1400.0e0,
         controlfile("optical/mu_s_vary"          ,  false) ),
   // probe parameters
   x_0("x_0", controlfile("probe/x_0_optimize"      ,  false),
-             &PDEModelBaseClass::dpde_dx_0,
-             &PDEModelBaseClass::d2pde_du_dm,
+             //&PDEModelBaseClass::dpde_dx_0,
+             //&PDEModelBaseClass::d2pde_du_dm,
              controlfile("probe/x_0_lb"            ,-1.00e4),
              controlfile("probe/x_0_ub"            , 1.00e4),
              controlfile("probe/x_0_dbeta"         ,fdEpsilon) , 0.04e0),
   y_0("y_0", controlfile("probe/y_0_optimize"      ,  false),
-             &PDEModelBaseClass::dpde_dy_0,
-             &PDEModelBaseClass::d2pde_du_dm,
+             //&PDEModelBaseClass::dpde_dy_0,
+             //&PDEModelBaseClass::d2pde_du_dm,
              controlfile("probe/y_0_lb"            ,  -1.00e4),
              controlfile("probe/y_0_ub"            ,   1.00e4),
              controlfile("probe/y_0_dbeta"         ,fdEpsilon), 0.06e0),
   z_0("z_0", controlfile("probe/z_0_optimize"      ,  false),
-             &PDEModelBaseClass::dpde_dz_0,
-             &PDEModelBaseClass::d2pde_du_dm,
+             //&PDEModelBaseClass::dpde_dz_0,
+             //&PDEModelBaseClass::d2pde_du_dm,
              controlfile("probe/z_0_lb"            ,  -1.00e4),
              controlfile("probe/z_0_ub"            ,   1.00e4),
              controlfile("probe/z_0_dbeta"         ,fdEpsilon), 0.07e0)
@@ -388,20 +356,47 @@ PennesStandardDiffusionApproximation::PennesStandardDiffusionApproximation(
   mu_a_0.ub(1) = controlfile("optical/mu_a_tumor_ub"            ,mu_a_0.ub(0)); 
   mu_s_0.ub(1) = controlfile("optical/mu_s_tumor_ub"            ,mu_s_0.ub(0));
 
+  // setup laser
+  this->SetupLaser( controlfile, es, this->get_num_elem_blk() );
+
+  // store a pointer to all field parameters for plotting
+  _fieldParameters.push_back( &mu_a_0 );  
+  _fieldParameters.push_back( &mu_s_0 );  
+}
+
+PetscTruth  PennesStandardDiffusionApproximation::CheckLinearity( const Parameters& parameters )
+{
+  PetscTruth LinearPDE = PETSC_TRUE; 
+  // test for non linear parameters
+  if ( mu_a_1 != parameters.get<PetscScalar>("mu_a_healthy") ) LinearPDE = PETSC_FALSE;
+  if ( mu_s_1 != parameters.get<PetscScalar>("mu_s_healthy") ) LinearPDE = PETSC_FALSE;
+  if ( k_1 != 0.0 )                                            LinearPDE = PETSC_FALSE;
+  if ( w_1 != parameters.get<PetscScalar>("w_0_healthy"))      LinearPDE = PETSC_FALSE;
+  // option to overwrite
+  PetscTruth  nonlinearSolve=PETSC_FALSE;
+  PetscOptionsGetTruth(PETSC_NULL,"-fem_linear_solve",&nonlinearSolve,PETSC_NULL);
+  if ( nonlinearSolve ) LinearPDE = PETSC_FALSE;
+
+  PetscFunctionReturn( LinearPDE ); 
+}
+PetscErrorCode PennesStandardDiffusionApproximation::SetupLaser( const GetPot &controlfile, 
+                                                                 EquationSystems &es,
+                                                                 const PetscInt NumberElementBlocks) 
+{
+  m_ProbeDomain = controlfile("probe/domain",NumberElementBlocks);
+
   // Loop over all the elements in the mesh. Store the element centroids and
   libMesh::MeshBase &mesh = es.get_mesh(); // get mesh data
   // volume fractions for each element in the probe domain element.
   libMesh::MeshBase::const_element_iterator el     = mesh.elements_begin();
   const libMesh::MeshBase::const_element_iterator el_end = mesh.elements_end();
 
-  m_ProbeDomain = controlfile("probe/domain",this->get_num_elem_blk()); 
-
   // default to no dirichlet nodes
   m_diffusingradius = 0.0;
   m_diffusinglength = 0.0;
   m_nelemtip        = 0;
 
-  if( m_ProbeDomain >= 0 && m_ProbeDomain < this->get_num_elem_blk())
+  if( m_ProbeDomain >= 0 && m_ProbeDomain < NumberElementBlocks)
    {
      std::cout << "   Setting up WFS Model" << std::endl << std::endl ;
      // reset data structures
@@ -460,20 +455,10 @@ PennesStandardDiffusionApproximation::PennesStandardDiffusionApproximation(
       }
    } 
 
-  // test for non linear parameters
-  if ( mu_a_1 != es.parameters.get<PetscScalar>("mu_a_healthy") ) m_LinearPDE = PETSC_FALSE;
-  if ( mu_s_1 != es.parameters.get<PetscScalar>("mu_s_healthy") ) m_LinearPDE = PETSC_FALSE;
-
-  // option to overwrite
-  PetscTruth  nonlinearSolve=PETSC_FALSE;
-  PetscOptionsGetTruth(PETSC_NULL,"-fem_linear_solve",&nonlinearSolve,PETSC_NULL);
-  if ( nonlinearSolve ) m_LinearPDE = PETSC_FALSE;
-
-  // store a pointer to all field parameters for plotting
-  _fieldParameters.push_back( &mu_a_0 );  
-  _fieldParameters.push_back( &mu_s_0 );  
+  PetscFunctionReturn( 0); 
 }
 
+// update laser position
 PetscErrorCode PennesStandardDiffusionApproximation::UpdateLaserPosition(
                            PetscScalar X0,PetscScalar Y0, PetscScalar Z0, 
                            PetscScalar X1,PetscScalar Y1, PetscScalar Z1) 
@@ -565,8 +550,8 @@ PennesVoltage::PennesVoltage( GetPot &controlfile,EquationSystems &es) :
   // electric conductivity
   m_ElectricConductivity_0( "s_0", es,
        controlfile("electric_conductivity/s_0_optimize",  false),
-       &PDEModelBaseClass::dpde_ds_0,
-       &PDEModelBaseClass::d2pde_du_ds_0,
+       //&PDEModelBaseClass::dpde_ds_0,
+       //&PDEModelBaseClass::d2pde_du_ds_0,
        controlfile("electric_conductivity/s_0_lb"      ,    0.10e0),
        controlfile("electric_conductivity/s_0_ub"      ,    0.70e0),
        controlfile("electric_conductivity/s_0_dbeta"   , std::sqrt(fdEpsilon)),
@@ -584,15 +569,6 @@ PennesVoltage::PennesVoltage( GetPot &controlfile,EquationSystems &es) :
   es.parameters.get<PetscScalar>(   "s_0_healthy") ) ; //[S/m] 
 
   m_ElectricConductivity_1= controlfile("electric_conductivity/s_1",0.0); // [S/m/C]        
-
-  // default initial condition is domain wise constant
-  InitValues.push_back( &PDEModelBaseClass::getInitialVoltage);
-
-  // neuman bc data
-  m_NeumannFlux.push_back( controlfile("bc/volt_flux",0.0) ) ;
-  // cauchy bc data
-  m_newton_coeff.push_back( controlfile("bc/v_newton_coeff",100.0));
-  m_u_infty.push_back(  controlfile("bc/v_infty",0.0)); 
 
   m_InitialVoltage.resize( this->get_num_elem_blk(),
                            controlfile("initial_condition/volt_init",0.0) );
@@ -631,12 +607,6 @@ PennesDeltaP1::PennesDeltaP1(
                        +4.33900 * std::pow(RefractionIndex,2)
                        -4.90366 *          RefractionIndex
                        +1.68960;
-
-  // neuman bc data
-  m_NeumannFlux.push_back( controlfile("bc/fluence_flux",0.0) ) ; 
-  // cauchy bc data
-  m_newton_coeff.push_back( controlfile("bc/fluence_newton_coeff",0.0)); 
-  m_u_infty.push_back(  controlfile("bc/fluence_infty",0.0)); 
 
   // set up laser position orientation
   m_laserTip[0] =  controlfile("probe/x_0",0.0) ; // [m]

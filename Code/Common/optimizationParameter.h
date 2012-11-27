@@ -26,7 +26,7 @@ class optimizationParameter {
    friend class qoiBaseClass;
 
 public:
- optimizationParameter( const char *, bool , dpde_dmMemFn, d2pde_dudmMemFn,
+ optimizationParameter( const char *, bool , //dpde_dmMemFn, d2pde_dudmMemFn,
                         PetscScalar, PetscScalar, PetscScalar, PetscScalar);
  std::vector<PetscInt> dofs;
  bool spatial_field;   // if true this parameter may vary spatially
@@ -90,7 +90,7 @@ private:
 class discreteParameter : public optimizationParameter 
 {
 public:
- discreteParameter (const char *,bool , dpde_dmMemFn,  d2pde_dudmMemFn,
+ discreteParameter (const char *,bool , //dpde_dmMemFn,  d2pde_dudmMemFn,
                     PetscScalar, PetscScalar, PetscScalar, PetscScalar );
  PetscScalar&  operator[](const int id) { return _value[id]; }
  PetscScalar&  at(const int id) { return _value.at(id); }
@@ -123,7 +123,7 @@ public:
  PetscScalar GetGlobalSolution(const unsigned int);
 
  // constructor
- spatialParameter (const char *,EquationSystems &, bool , dpde_dmMemFn, d2pde_dudmMemFn,
+ spatialParameter (const char *,EquationSystems &, bool , //dpde_dmMemFn, d2pde_dudmMemFn,
                    PetscScalar, PetscScalar, PetscScalar, PetscScalar, bool);
  // clean up
  ~spatialParameter(); 

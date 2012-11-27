@@ -104,11 +104,6 @@ public:
   PDEModelBaseClass(GetPot &,EquationSystems &); // constructor
 
   /**
-   * @returns a reference to this system's parent EquationSystems object.
-   */
-  EquationSystems & get_equation_systems() { return _equation_systems; }
-
-  /**
    *  Write the element data
    */
   void writeElementData(OStringStream&, libMesh::MeshBase&, std::vector<Number>&, Real);
@@ -141,40 +136,13 @@ public:
   /** default regression doesnt nothing */
   virtual void verifySolution( EquationSystems &){}
   
-  //boundary conditions  can be overridden in derived class if necessary
-  // the member function pointer will call the derived class function
-  virtual PetscScalar residualNothingBC(const unsigned int ,const Real &,
-                                        int , const int ,
-                                        const Point &, const Parameters& )
-    { return 0.0; }
-  virtual PetscScalar residualNeumannBC(const unsigned int i_var,const Real &,
-                                        int , const int ,
-                                        const Point & , const Parameters&)
-    { return m_NeumannFlux[i_var]; }
+  virtual PetscScalar jacobianFluenceBC(const unsigned int , int,
+                                        const Point & , const Parameters& )
+    { libmesh_error();return 0.0; }
   virtual PetscScalar residualFluenceBC(const unsigned int , const Real &,
                                        int , const int ,
                                        const Point &, const Parameters& )
     { libmesh_error(); return 0.0; }
-  /**
-   * Cauchy boundary data for each variable
-   * \f[
-   *    h(u - u_\infty)
-   * \f]
-   */
-  virtual PetscScalar residualCauchyBC( const unsigned int i_var, const Real &temperature,
-                                        int , const int ,
-                                        const Point & , const Parameters& )
-    { return m_newton_coeff[i_var]*(temperature-m_u_infty[i_var]) ; }
-
-  virtual PetscScalar jacobianNothingBC(const unsigned int , int,
-                                        const Point & , const Parameters& )
-    { return 0.0; }
-  virtual PetscScalar jacobianFluenceBC(const unsigned int , int,
-                                        const Point & , const Parameters& )
-    { libmesh_error();return 0.0; }
-  virtual PetscScalar jacobianCauchyBC(const unsigned int i_var, int,
-                                       const Point &, const Parameters& )
-    { return m_newton_coeff[i_var]; }
 
   //boundary conditions  can be overridden in derived class if necessary
   // the member function pointer will call the derived class function
@@ -239,65 +207,6 @@ public:
   /** nodal dirichlet data */
   virtual bool dirichletNodalData( Point &) {return false;}
  
-  /** voltage initial condition. overwritten in derived class*/
-  virtual PetscScalar getInitialVoltage(unsigned int,unsigned int,
-                                        const Point&,const Parameters& )
-       {
-         libmesh_error();return 0.0;
-       }
-  /** temperature initial condition. overwritten in derived class*/
-  virtual PetscScalar getInitialTemperature(unsigned int,unsigned int, 
-                                            const Point&  , const Parameters& )
-       {
-         libmesh_error();return 0.0;
-       }
-
-  /** initial damage */
-  virtual PetscScalar getInitialDamage(unsigned int,unsigned int,
-                                       const Point&,const Parameters& )
-       {
-         return 0.0;
-       }
- 
-  /** fluence initial condition. overwritten in derived class*/
-  virtual PetscScalar getInitialFluence(unsigned int,unsigned int, 
-                                            const Point&  , const Parameters& )
-       {
-         return 0.0;
-       }
-
-  /** flux initial condition. overwritten in derived class*/
-  virtual PetscScalar getExternalFlux_X(unsigned int,unsigned int, 
-                                      const Point&  , const Parameters& )
-       { libmesh_error();return 0.0; }
-  virtual PetscScalar getExternalFlux_Y(unsigned int,unsigned int, 
-                                      const Point&  , const Parameters& )
-       { libmesh_error();return 0.0; }
-  virtual PetscScalar getExternalFlux_Z(unsigned int,unsigned int, 
-                                      const Point&  , const Parameters& )
-       { libmesh_error();return 0.0; }
-  /** flux initial condition. overwritten in derived class*/
-  virtual PetscScalar getInterstitialFlux_X(unsigned int,unsigned int, 
-                                          const Point&,const Parameters& )
-       { libmesh_error();return 0.0; }
-  virtual PetscScalar getInterstitialFlux_Y(unsigned int,unsigned int, 
-                                          const Point&,const Parameters& )
-       { libmesh_error();return 0.0; }
-  virtual PetscScalar getInterstitialFlux_Z(unsigned int,unsigned int, 
-                                          const Point&,const Parameters& )
-       { libmesh_error();return 0.0; }
-  /** flux initial condition. overwritten in derived class*/
-  virtual PetscScalar getExternalIrradiance(unsigned int,unsigned int, 
-                                            const Point&  , const Parameters& )
-       {
-         libmesh_error();return 0.0;
-       }
-  /** flux initial condition. overwritten in derived class*/
-  virtual PetscScalar getInterstitialIrradiance(unsigned int,unsigned int, 
-                                            const Point&  , const Parameters& )
-       {
-         libmesh_error();return 0.0;
-       }
  /**
   *  derivatives of pde wrt the parameters 
   *   these are implemented at virtual member function pointers
@@ -399,49 +308,7 @@ upper-packed storage mode:
    1   CONTINUE
 
 */
-  Real  TimeDerivativeScalingFactor() 
-         {return m_TimeDerivativeScalingFactor;}
-
-  // return true if this is a linear solve
-  PetscTruth  LinearPDE()
-         {return m_LinearPDE;}
-
-  /**
-   *  return PETSC_TRUE if we are solving time dependet equations  
-   *  on this domain
-   */
-  PetscTruth  TransientTerm(const unsigned int DomainID) 
-                  {return m_TransientDomain[DomainID];}
-
 protected:
-
-  /**
-   * Constant reference to the \p EquationSystems object
-   * used for the simulation.
-   */
-  EquationSystems& _equation_systems;
-
-  /**
-   *  return PETSC_TRUE if solving time dependent equations  
-   *  on this domain
-   */
-  std::vector<PetscTruth>  m_TransientDomain;  
-
-  // dirichlet, neumann, cauchy BC Data
-  std::vector<Real>  m_newton_coeff,   ///<  \f$ h  \f$ 
-                     m_u_infty,        ///<  \f$ u_\infty  \f$ 
-                     m_NeumannFlux;    ///<  \f$ \mathcal{G}  \f$ 
-
-  PetscTruth  m_LinearPDE;
-
-  /**
-   *  mass term to scale to time derivative to 1, \f$ \dot{u} = F(u)\f$
-   *  @todo {m_TimeDerivativeScalingFactor will break verification problems}
-   */
-  Real  m_TimeDerivativeScalingFactor;
-
-  // store a pointer to all field parameters for plotting
-  std::vector<optimizationParameter*> _fieldParameters;
 
 
 };

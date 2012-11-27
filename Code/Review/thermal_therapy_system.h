@@ -166,14 +166,6 @@ public:
   //                 const unsigned int &dof,const unsigned int &qp)
   // { return (*this->m_MathModel.psi[var])[dof][qp] ; }
 
-  /** this class holds all constitutive data.
-    * should be an instaniation of 
-    *     - PennesStandardDiffusionApproximation
-    *     - PennesVoltage 
-    *     - PennesLineSource 
-    *     - VerifySourceTerm 
-    */
-  MathematicalModel m_MathModel; 
 
 protected:
   

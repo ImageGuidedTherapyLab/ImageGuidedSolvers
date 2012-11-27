@@ -372,6 +372,10 @@ public:
   Real  ThermalConductivity(  const unsigned int &, const Real &, const Real &) ;
   Real dThermalConductivitydu(const unsigned int &, const Real &, const Real &, const Real &) ;
   
+  PetscScalar GetBodyTemp()
+     { 
+       return m_bodyTemp ;
+     }
   /** initial condition
    *  return body  temp on subdomain 0 1 
    *  return probe temp on subdomain 2 3 
@@ -440,6 +444,13 @@ public:
        VecPointwiseMult(derivative,derivative,workVec);
        PetscFunctionReturnVoid();
      }
+  PetscInt    get_num_elem_blk(){     return n_block ; }
+
+  /**
+   * @returns a reference to this system's parent EquationSystems object.
+   */
+  EquationSystems & get_equation_systems() { return _equation_systems; }
+
 protected:
   Real rho,            ///<  \f$ \rho   \f$ 
        specific_heat;  ///<  \f$ c_p    \f$ 
@@ -495,6 +506,16 @@ protected:
 
   discreteParameter Power;
  
+  PetscInt n_block;     ///< # of mesh blocks
+  /**
+   * Constant reference to the \p EquationSystems object
+   * used for the simulation.
+   */
+  EquationSystems& _equation_systems;
+
+  // store a pointer to all field parameters for plotting
+  std::vector<optimizationParameter*> _fieldParameters;
+
 private: 
   /** identify applicator domain */
   unsigned int m_ApplicatorDomain  ;
@@ -575,6 +596,10 @@ public:
   /** setup the laser domain */
   PetscErrorCode UpdateLaserPosition(PetscScalar,PetscScalar,PetscScalar,
                                      PetscScalar,PetscScalar,PetscScalar);
+  PetscErrorCode SetupLaser( const GetPot& , EquationSystems &,const PetscInt ); 
+  /// check the linearity of the model
+  PetscTruth  CheckLinearity(        const Parameters& );
+  
 protected:
 
   PetscInt m_ProbeDomain;
@@ -804,6 +829,8 @@ public:
      { 
        return m_InitialVoltage[domainId];
      }
+  /// check the linearity of the model
+  PetscTruth  CheckLinearity(        const Parameters& ) {return PETSC_TRUE;}
 protected:
   std::vector< PetscScalar > m_InitialVoltage;
   spatialParameter m_ElectricConductivity_0; ///<  \f$ \sigma_0    \f$ 
@@ -928,68 +955,23 @@ public:
   *   - \nabla \phi \cdot \hat{n}  = \frac{1}{Ah} (\phi +  A h 3 g^*  \mu_s^* E(r,z))
   * \f]
   */
- virtual PetscScalar residualFluenceBC(Real &u_theta, Real &fluence,
-                                       int domainId, const int timeId,
-                             const Point &qpoint, const Parameters& parameters )
+ void UpdateBoundaryData(const Real &u_theta, const Real &damage,
+                                const int domainId,  const int timeId,
+                                const Point &qpoint, const Parameters& ,
+                                Real &CoolingCoefficient, Real &AmbientValue )
  {
-   //FIXME design flaw in BC, assume linear for now
-
    // Compute the solution at the theta timestep
-   Real u_theta = m_bodyTemp, damage = 0.0;
    Real mu_tr=this->absorption(domainId,u_theta,damage)
              +this->scattering(domainId,u_theta,damage)*(1.0e0-anfact);
    Real h = 2.0/3.0 / mu_tr;
    //
    PetscScalar boundaryValue = 0.0;
-   const unsigned int z_var= parameters.get<unsigned int>("z_var") ; 
-   if(i_var == z_var ) boundaryValue  = 1.0/m_ReflectionFactor/h * 
-                       (fluence + m_ReflectionFactor * h * 3.0 * m_ScatteringAsymmetry 
-                                                     * scattering(domainId,u_theta,damage)*(1.0e0-m_ForwardScatterFraction) 
-                                                     * this->ExternalIrradiance(domainId,u_theta,damage,qpoint,timeId) ) ;
-   return boundaryValue ;
- }
- virtual PetscScalar jacobianFluenceBC(const unsigned int i_var, int domainId, 
-                         const Point &, const Parameters& parameters)
- {
-   //FIXME design flaw in BC, assume linear for now
-   Real u_theta = m_bodyTemp, damage = 0.0;
-   Real mu_tr=this->absorption(domainId,u_theta,damage)
-             +this->scattering(domainId,u_theta,damage)*(1.0e0-anfact);
-   Real h = 2.0/3.0 / mu_tr;
-   //
-   PetscScalar boundaryValue = 0.0;
-   const unsigned int z_var= parameters.get<unsigned int>("z_var") ; 
-   if(i_var == z_var ) boundaryValue  = 1.0/m_ReflectionFactor/h ;
-   return boundaryValue ;
- }
- virtual PetscScalar residualCauchyBC(const unsigned int i_var, const Real &varValue,
-                                       int domainId, const int ,
-            const Point &, const Parameters& parameters)
- {
-   //FIXME design flaw in BC, assume linear for now
-   Real u_theta = m_bodyTemp, damage = 0.0;
-   Real mu_tr=this->absorption(domainId,u_theta,damage)
-             +this->scattering(domainId,u_theta,damage)*(1.0e0-anfact);
-   Real h = 2.0/3.0 / mu_tr;
-   //
-   PetscScalar boundaryValue = m_newton_coeff[i_var]*(varValue-m_u_infty[i_var]) ; 
-   const unsigned int z_var= parameters.get<unsigned int>("z_var") ; 
-   if(i_var == z_var ) boundaryValue  = 1.0/m_ReflectionFactor/h * varValue;
-   return boundaryValue ;
- }
- virtual PetscScalar jacobianCauchyBC(const unsigned int i_var, int domainId, 
-                     const Point &, const Parameters& parameters)
- {
-   //FIXME design flaw in BC, assume linear for now
-   Real u_theta = m_bodyTemp, damage = 0.0;
-   Real mu_tr=this->absorption(domainId,u_theta,damage)
-             +this->scattering(domainId,u_theta,damage)*(1.0e0-anfact);
-   Real h = 2.0/3.0 / mu_tr;
-   //
-   PetscScalar boundaryValue = m_newton_coeff[i_var]; 
-   const unsigned int z_var= parameters.get<unsigned int>("z_var") ; 
-   if(i_var == z_var ) boundaryValue  = 1.0/m_ReflectionFactor/h ;
-   return boundaryValue ;
+   CoolingCoefficient = 1.0/m_ReflectionFactor/h;
+   AmbientValue       = - m_ReflectionFactor * h * 3.0 * m_ScatteringAsymmetry 
+                                             * scattering(domainId,u_theta,damage)
+                                             *(1.0e0-m_ForwardScatterFraction) 
+                                             * this->ExternalIrradiance(domainId,u_theta,damage,qpoint,timeId)  ;
+   return ;
  }
 protected:
  /*

@@ -36,7 +36,7 @@ include ${IGS_SRC}/conf/variables
 #The variable SUFFIXES is defined to the default list of suffixes before make reads any makefiles. You can change the list of suffixes with a rule for the special target .SUFFIXES, but that does not alter this variable. 
 .SUFFIXES:
 #    The prerequisites of the special target .PHONY are considered to be phony targets. When it is time to consider such a target, make will run its commands unconditionally, regardless of whether a file with that name exists or what its last-modification time is
-.PHONY: build_error banner tar tgz dfclean realclean link done check verify tags dddas_tags mpi_tags petsc_tao_tags libmesh_tags itk_tags Testing $(obj_path)/femLibrary.so
+.PHONY: build_error banner tar tgz dfclean realclean link done check verify tags igs_tags mpi_tags petsc_tao_tags libmesh_tags itk_tags Testing $(obj_path)/femLibrary.so
  
 
 ###############################
@@ -203,7 +203,7 @@ tags:
 local_tags: 
 	cd $(SCRATCH) ;ctags -R -h +.blk --langmap=fortran:+.blk.FPP --langmap=c++:+.txx --languages=c,c++,fortran --regex-fortran=/MPI_HEXas/MPI_HEXAS/ --regex-fortran=/MPI_GMVVERTex/MPI_GMVVERTEX/ --regex-fortran=/MPI_CELLINfo/MPI_CELLINFO/ --regex-fortran=/MPI_NODVar/MPI_NODVAR/ $(DDDAS_SRC) $(PETSC_DIR) $(TAO_DIR) $(MPI_SOURCE) $(MPI_DIR) $(ITK_SOURCE) $(LIBMESH_DIR) $(SRC_DIR)
 
-sep_tags: dddas_tags  itk_tags  libmesh_tags  mpi_petsc_tao_tags  
+sep_tags: igs_tags  itk_tags  libmesh_tags  mpi_petsc_tao_tags  
 	@echo "creating separate tag files "
 	@echo "in vim  "
 	@echo "       :set tags=<file>"

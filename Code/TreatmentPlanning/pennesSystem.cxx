@@ -17,10 +17,9 @@
 #include "petsc_matrix.h"
 #include "mesh_function.h"
 #include "point_locator_base.h"
+#include "fem_context.h"
 //local
 #include "pennesModel.h" // Constitutive data
-#include "thermal_therapy_system.h"
-#include "thermal_therapy_system.txx"
 #include "pennesSystem.h"
 #include "pennesSystem.txx"
 
@@ -38,7 +37,7 @@ System * AddPennesSDASystem( char *SystemName,
 
   // store
   std::cout <<"Setting up Bioheat with SDA Laser "<<std::endl;
-  typedef  LITTSystem < PennesStandardDiffusionApproximation >  PennesSDASystem;
+  typedef  BioHeatSystem < PennesStandardDiffusionApproximation >  PennesSDASystem;
   FEMSystem *m_pdeSolver = static_cast< FEMSystem* >( 
             &m_eqn_systems->add_system< PennesSDASystem > (SystemName)
                                                     ) ; 
@@ -59,7 +58,7 @@ PetscErrorCode PennesSDASystemUpdateLaserPosition(System * currentSystem,
   PetscErrorCode ierr;
 
   // get pointer to petsc vector
-  typedef LITTSystem<PennesStandardDiffusionApproximation>  PennesSDASystem;
+  typedef BioHeatSystem<PennesStandardDiffusionApproximation>  PennesSDASystem;
   PennesSDASystem *penesSDASystem = 
                      dynamic_cast<PennesSDASystem *>(currentSystem);
   ierr = penesSDASystem->m_MathModel.UpdateLaserPosition(X0,Y0,Z0,X1,Y1,Z1);
@@ -77,7 +76,7 @@ PetscErrorCode PennesSDASystemUpdateLaserPower(System * currentSystem,
   PetscErrorCode ierr;
 
   // get pointer to petsc vector
-  typedef LITTSystem<PennesStandardDiffusionApproximation>  PennesSDASystem;
+  typedef BioHeatSystem<PennesStandardDiffusionApproximation>  PennesSDASystem;
   PennesSDASystem *penesSDASystem = 
                      dynamic_cast<PennesSDASystem *>(currentSystem);
   ierr = penesSDASystem->m_MathModel.setPower(timeID,newPower);

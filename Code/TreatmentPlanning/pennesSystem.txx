@@ -1,13 +1,13 @@
 // Constructor
 template < typename MathematicalModel >
-LITTSystem< MathematicalModel > ::
-LITTSystem(EquationSystems& es,
+BioHeatSystem< MathematicalModel > ::
+BioHeatSystem(EquationSystems& es,
            const std::string& name,
            const unsigned int number ) 
 //base class constructor
-:ThermalTherapySystem< MathematicalModel >::ThermalTherapySystem(es, 
-                                                               name,
-                                                             number) 
+:PetscFEMSystem::PetscFEMSystem(es, name, number) ,
+// initialize constitutive data
+m_MathModel (*(es.parameters.get<GetPot*>("controlfile")), es) 
 {
   GetPot &controlfile = *(es.parameters.get<GetPot*>("controlfile"));
   // Temperature and Damage
@@ -40,11 +40,21 @@ LITTSystem(EquationSystems& es,
   this->m_DirichletNodeSets[this->a_var].push_back(1);
   this->m_DirichletNodeSets[this->b_var].push_back(1);
   // make sure the same
-  m_LinearSolve =  m_MathModel.LinearPDE();
+  m_LinearSolve =  this->LinearPDE();
+
+  // default initial condition is domain wise constant
+  this->InitValues.push_back( &PetscFEMSystem::getInitialTemperature);
+
+  // neuman bc data
+  m_NeumannFlux.push_back( controlfile("bc/temp_flux",0.0) ) ; //[J/m^2/s]  
+  // cauchy bc data
+  m_newton_coeff.push_back( controlfile("bc/newton_coeff",1.0)) ; //[J/s/m^2/C] 
+  m_u_infty.push_back(  controlfile("bc/u_infty",m_MathModel.GetBodyTemp())); // degC
+  
 }
 // init the variables
 template< typename MathematicalModel  >
-void LITTSystem< MathematicalModel >::init_data ()
+void BioHeatSystem< MathematicalModel >::init_data ()
 {
   PetscFunctionBegin;
   // setup the system variables
@@ -58,17 +68,19 @@ void LITTSystem< MathematicalModel >::init_data ()
   this->time_evolving(this->u_var);
 
   // set IC data
-  this->m_MathModel.InitValues.resize(3,NULL);
-  this->m_MathModel.InitValues[this->u_var]=&PDEModelBaseClass::getInitialTemperature;
-  this->m_MathModel.InitValues[this->a_var]=&PDEModelBaseClass::getInitialDamage;
-  this->m_MathModel.InitValues[this->b_var]=&PDEModelBaseClass::getInitialDamage;
+  this->InitValues.resize(3,NULL);
+  this->InitValues[this->u_var]=&PetscFEMSystem::getInitialTemperature;
+  this->InitValues[this->a_var]=&PetscFEMSystem::getInitialDamage;
+  this->InitValues[this->b_var]=&PetscFEMSystem::getInitialDamage;
+
+  m_LinearPDE = this->m_MathModel.CheckLinearity(this->get_equation_systems().parameters);
 
   PetscFunctionReturnVoid();
 }
 
 /* ------------------------------------------------------------ */
 template< typename BioheatTransferModel  >
-void LITTSystem< BioheatTransferModel >::
+void BioHeatSystem< BioheatTransferModel >::
 SetupDirichlet(libMesh::MeshBase& mesh)
 {
   PetscFunctionBegin;
@@ -87,22 +99,10 @@ SetupDirichlet(libMesh::MeshBase& mesh)
 
 // init data structures
 template< typename MathematicalModel  >
-void LITTSystem< MathematicalModel >::
+void BioHeatSystem< MathematicalModel >::
 init_context(DiffContext &context)
 {
-  PetscFEMContext &c = libmesh_cast_ref<PetscFEMContext&>(context);
-
-  // use crank nicolson for temperature
-  if( this->m_MathModel.TransientTerm(0) )  
-    {
-     PetscPrintf(PETSC_COMM_WORLD,"using crank nicolson...\n");
-     c.SetThetaValue(this->u_var,0.5); 
-    }
-  else // steady state
-    {
-     PetscPrintf(PETSC_COMM_WORLD,"solving steady state...\n");
-     c.SetThetaValue(this->u_var,1.0); 
-    }
+  FEMContext &c = libmesh_cast_ref<FEMContext&>(context);
 
   // We should prerequest all the data
   // we will need to build the linear system.
@@ -118,7 +118,7 @@ init_context(DiffContext &context)
 
 
 /**
- * @fn bool LITTSystem::element_time_derivative(bool request_jacobian, DiffContext &context)
+ * @fn bool BioHeatSystem::element_time_derivative(bool request_jacobian, DiffContext &context)
  *
  * @section PennesGalkerinDiscretization Discretization of Equations
  * 
@@ -250,10 +250,10 @@ init_context(DiffContext &context)
  * @endlatexonly
  */
 template< typename MathematicalModel  >
-bool LITTSystem< MathematicalModel >::
+bool BioHeatSystem< MathematicalModel >::
 element_time_derivative (bool request_jacobian, DiffContext &context)
 {
-  PetscFEMContext &c = libmesh_cast_ref<PetscFEMContext&>(context);
+  FEMContext &c = libmesh_cast_ref<FEMContext&>(context);
 
   // set the field id in the spatially varying data structures
 
@@ -306,14 +306,13 @@ element_time_derivative (bool request_jacobian, DiffContext &context)
   for (unsigned int qp=0; qp != n_qpoints; qp++)
     {
       // Compute the solution & its gradient at the old Newton iterate
-      Number u_theta  = c.interior_theta_value(   this->u_var,qp);
-      Number delta_u  = c.interior_diff_value(    this->u_var,qp);
-      Gradient grad_u = c.interior_theta_gradient(this->u_var,qp);
+      Number u_theta  = c.interior_value(   this->u_var,qp);
+      Gradient grad_u = c.interior_gradient(this->u_var,qp);
       Number  z_value = 0.0; // not used
 
       // get damage values
-      Number  damage  = c.interior_theta_value(   this->a_var,qp);
-      Number DdamageDu= c.interior_theta_value(   this->b_var,qp);
+      Number  damage  = c.interior_value(   this->a_var,qp);
+      Number DdamageDu= c.interior_value(   this->b_var,qp);
 
       Gradient DiffusionDirection = this->m_MathModel.DiffusionDirection(subdomain_id) ; 
       Gradient TempDiffusionDirection( 
@@ -340,13 +339,10 @@ element_time_derivative (bool request_jacobian, DiffContext &context)
                            +    // diffusion term
                 this->m_MathModel.ThermalConductivity(field_id,u_theta,damage) *
                                          ( TempDiffusionDirection * dphi[i][qp] )
-		) * this->m_MathModel.TimeDerivativeScalingFactor();
+		) ;
           // convection term
           Fu(i) += JxW[qp] * phi[i][qp] * 
                 ( this->m_MathModel.BulkFluidFlow(subdomain_id) * grad_u ) ; 
-          // transient term
-          if( this->m_MathModel.TransientTerm(subdomain_id) )  
-              Fu(i) += JxW[qp] * delta_u / this->deltat * phi[i][qp] ;
         }
 
       // Matrix contributions 
@@ -375,18 +371,12 @@ element_time_derivative (bool request_jacobian, DiffContext &context)
                        this->m_MathModel.dThermalConductivitydu(field_id,
                                                      u_theta,damage,DdamageDu) *
                                           ( grad_u * dphi[i][qp] ) * phi[j][qp]
-		) * c.ThetaValue(this->u_var) 
-                  * this->m_MathModel.TimeDerivativeScalingFactor();
+		) ;
                 // convection derivative (non-symmetric)
                 Kuu(i,j) += JxW[qp] * phi[i][qp] *
                        ( this->m_MathModel.BulkFluidFlow(subdomain_id) 
-                         * dphi[j][qp] ) * c.ThetaValue(this->u_var) ;
+                         * dphi[j][qp] ) ;
               }
-         // do NOT add transient term to the System Dynamics matrix
-         if( this->m_MassMatrix  or this->m_MathModel.TransientTerm(subdomain_id) )  
-           for (unsigned int i=0; i != n_u_dofs; i++)
-             for (unsigned int j=0; j != n_u_dofs; j++)
-                Kuu(i,j) += JxW[qp] / this->deltat * phi[i][qp] * phi[j][qp];
         }
     } // end of the quadrature point qp-loop
   
@@ -395,10 +385,10 @@ element_time_derivative (bool request_jacobian, DiffContext &context)
 /* --------------Pre Assembly for Dirichlet BC ---------- */
 // called before nonlinear solve to setup diriclet BC
 #undef __FUNCT__
-#define __FUNCT__ "LITTSystem::ApplyDirichlet"
+#define __FUNCT__ "BioHeatSystem::ApplyDirichlet"
 // assembly
 template< typename MathematicalModel  >
-void LITTSystem< MathematicalModel >::
+void BioHeatSystem< MathematicalModel >::
 ApplyDirichlet ()
 {
   PetscFunctionBegin;
@@ -457,7 +447,7 @@ ApplyDirichlet ()
 
 
 //PetscErrorCode 
-//LITTSystem::AssembleSystemDynamicsMatrix(Mat,int) 
+//BioHeatSystem::AssembleSystemDynamicsMatrix(Mat,int) 
 //{
 //  /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 //     Build State Transition Matrix
@@ -556,7 +546,7 @@ ApplyDirichlet ()
 //}
 //// Assemble Load Vector for LITT Simulation
 //PetscErrorCode 
-//LITTSystem::AssembleSystemDynamicsMatrix(Mat,int) 
+//BioHeatSystem::AssembleSystemDynamicsMatrix(Mat,int) 
 //{
 //  // spacing parameters
 //  PetscScalar    hx,hy,hz,sc;
@@ -613,7 +603,7 @@ RFASystem(EquationSystems& es,
            const std::string& name,
            const unsigned int number ) 
 //base class constructor
-:LITTSystem< MathematicalModel >::LITTSystem(es, 
+:BioHeatSystem< MathematicalModel >::BioHeatSystem(es, 
                                              name,
                                              number) 
 {
@@ -643,6 +633,16 @@ RFASystem(EquationSystems& es,
      std::cout << *setIDIter << " " ;
    }
   std::cout << std::endl << std::flush;
+
+  // default initial condition is domain wise constant
+  this->InitValues.push_back( &PetscFEMSystem::getInitialVoltage);
+
+  // neuman bc data
+  this->m_NeumannFlux.push_back( controlfile("bc/volt_flux",0.0) ) ;
+  // cauchy bc data
+  this->m_newton_coeff.push_back( controlfile("bc/v_newton_coeff",100.0));
+  this->m_u_infty.push_back(  controlfile("bc/v_infty",0.0)); 
+
 }
 // init the variables
 template< typename MathematicalModel  >
@@ -657,11 +657,11 @@ void RFASystem< MathematicalModel >::init_data ()
   this->time_evolving(this->u_var);
 
   // set IC data
-  this->m_MathModel.InitValues.resize(4,NULL);
-  this->m_MathModel.InitValues[this->u_var ]=&PDEModelBaseClass::getInitialTemperature;
-  this->m_MathModel.InitValues[this->a_var]=&PDEModelBaseClass::getInitialDamage;
-  this->m_MathModel.InitValues[this->b_var]=&PDEModelBaseClass::getInitialDamage;
-  this->m_MathModel.InitValues[this->z_var ]=&PDEModelBaseClass::getInitialVoltage;
+  this->InitValues.resize(4,NULL);
+  this->InitValues[this->u_var ]=&PetscFEMSystem::getInitialTemperature;
+  this->InitValues[this->a_var]=&PetscFEMSystem::getInitialDamage;
+  this->InitValues[this->b_var]=&PetscFEMSystem::getInitialDamage;
+  this->InitValues[this->z_var ]=&PetscFEMSystem::getInitialVoltage;
 }
 
 /* --------------Pre Assembly for Dirichlet BC ---------- */
@@ -703,7 +703,7 @@ template< typename MathematicalModel  >
 bool RFASystem< MathematicalModel >::
 element_time_derivative (bool request_jacobian, DiffContext &context)
 {
-  PetscFEMContext &c = libmesh_cast_ref<PetscFEMContext&>(context);
+  FEMContext &c = libmesh_cast_ref<FEMContext&>(context);
 
   // Initialize the per-element data for elem.
   std::vector<unsigned int> param_dof_indices;
@@ -765,14 +765,13 @@ element_time_derivative (bool request_jacobian, DiffContext &context)
   for (unsigned int qp=0; qp != n_qpoints; qp++)
     {
       // Compute the solution & its gradient at the old Newton iterate
-      Number u_theta  = c.interior_theta_value(   this->u_var,qp);
-      Number delta_u  = c.interior_diff_value(    this->u_var,qp);
-      Gradient grad_u = c.interior_theta_gradient(this->u_var,qp);
+      Number u_theta  = c.interior_value(   this->u_var,qp);
+      Gradient grad_u = c.interior_gradient(this->u_var,qp);
       Number z_value  = c.interior_value(   this->z_var,qp);
       Gradient grad_z = c.interior_gradient(this->z_var,qp);
       // get damage values
-      Number  damage  = c.interior_theta_value(   this->a_var,qp);
-      Number DdamageDu= c.interior_theta_value(   this->b_var,qp);
+      Number  damage  = c.interior_value(   this->a_var,qp);
+      Number DdamageDu= c.interior_value(   this->b_var,qp);
 
       // First, an i-loop over the velocity degrees of freedom.
       // We know that n_u_dofs == n_v_dofs so we can compute contributions
@@ -794,13 +793,10 @@ element_time_derivative (bool request_jacobian, DiffContext &context)
                 this->m_MathModel.ThermalConductivity(field_id,
                                                        u_theta,damage) *
                                                        (grad_u * dphi[i][qp])
-		) * this->m_MathModel.TimeDerivativeScalingFactor();
+		) ;
           // convection term
           Fu(i) += JxW[qp] * phi[i][qp] * 
                 ( this->m_MathModel.BulkFluidFlow(subdomain_id) * grad_u ) ; 
-          // transient term
-          if( this->m_MathModel.TransientTerm(subdomain_id) )  
-              Fu(i) += JxW[qp] * delta_u / this->deltat * phi[i][qp] ;
 
           // Matrix contributions for the uu and vv couplings.
           if (request_jacobian)
@@ -824,22 +820,17 @@ element_time_derivative (bool request_jacobian, DiffContext &context)
                       this->m_MathModel.dThermalConductivitydu(field_id,
                                                      u_theta,damage,DdamageDu) *
                                     ( grad_u * dphi[i][qp] ) * phi[j][qp]
-		) * c.ThetaValue(this->u_var) 
-                  * this->m_MathModel.TimeDerivativeScalingFactor();
+		) ;
                 // convection derivative (non-symmetric)
                 Kuu(i,j) += JxW[qp] * phi[i][qp] *
                        ( this->m_MathModel.BulkFluidFlow(subdomain_id) *
-dphi[j][qp] ) * c.ThetaValue(this->u_var)  ;
+dphi[j][qp] ) ;
 
-                // transient component
-                if( this->m_MathModel.TransientTerm(subdomain_id) )  
-                    Kuu(i,j) += JxW[qp] / this->deltat * phi[i][qp] * phi[j][qp];
                 // coupling terms
                 Kuz(i,j) += JxW[qp] * (
                   2.0 * this->m_MathModel.ElectricConductivity(field_id,u_theta,damage) *
                                    phi[i][qp] * ( dpsi[j][qp] * grad_z ) 
-		) * c.ThetaValue(this->u_var) 
-                  * this->m_MathModel.TimeDerivativeScalingFactor();
+		) ;
               }
 
         }
@@ -871,7 +862,7 @@ RHTESystem(EquationSystems& es,
            const std::string& name,
            const unsigned int number ) 
 //base class constructor
-:LITTSystem< MathematicalModel >::LITTSystem(es, 
+:BioHeatSystem< MathematicalModel >::BioHeatSystem(es, 
                                              name,
                                              number) 
 {
@@ -912,6 +903,13 @@ RHTESystem(EquationSystems& es,
      std::cout << *setIDIter << " " ;
    }
   std::cout << std::endl << std::flush;
+
+  // neuman bc data
+  this->m_NeumannFlux.push_back( controlfile("bc/fluence_flux",0.0) ) ; 
+  // cauchy bc data
+  this->m_newton_coeff.push_back( controlfile("bc/fluence_newton_coeff",0.0)); 
+  this->m_u_infty.push_back(  controlfile("bc/fluence_infty",0.0)); 
+
 }
 
 // init the variables
@@ -927,28 +925,25 @@ void RHTESystem < MathematicalModel >::init_data ()
   this->time_evolving(this->u_var);
 
   // set IC data
-  this->m_MathModel.InitValues.resize(8,NULL);
-  this->m_MathModel.InitValues[ this->u_var]=&PDEModelBaseClass::getInitialTemperature;
-  this->m_MathModel.InitValues[ this->a_var]=&PDEModelBaseClass::getInitialDamage;
-  this->m_MathModel.InitValues[ this->b_var]=&PDEModelBaseClass::getInitialDamage;
-  this->m_MathModel.InitValues[ this->z_var]=&PDEModelBaseClass::getInitialFluence;
+  this->InitValues.resize(8,NULL);
+  this->InitValues[ this->u_var]=&PetscFEMSystem::getInitialTemperature;
+  this->InitValues[ this->a_var]=&PetscFEMSystem::getInitialDamage;
+  this->InitValues[ this->b_var]=&PetscFEMSystem::getInitialDamage;
+  this->InitValues[ this->z_var]=&PetscFEMSystem::getInitialFluence;
 
   if(this->m_ExternalFiber)
     {// set pointers to external fiber routines
-     this->m_MathModel.InitValues[ this->e_var]=&PDEModelBaseClass::getExternalIrradiance;
-     this->m_MathModel.InitValues[this->fx_var]=&PDEModelBaseClass::getExternalFlux_X;
-     this->m_MathModel.InitValues[this->fy_var]=&PDEModelBaseClass::getExternalFlux_Y;
-     this->m_MathModel.InitValues[this->fz_var]=&PDEModelBaseClass::getExternalFlux_Z;
-     // special BC for external source
-     this->m_MathModel.ResidualBC[4] = &PDEModelBaseClass::residualFluenceBC;
-     this->m_MathModel.JacobianBC[4] = &PDEModelBaseClass::jacobianFluenceBC;
+     this->InitValues[ this->e_var]=&PetscFEMSystem::getExternalIrradiance;
+     this->InitValues[this->fx_var]=&PetscFEMSystem::getExternalFlux_X;
+     this->InitValues[this->fy_var]=&PetscFEMSystem::getExternalFlux_Y;
+     this->InitValues[this->fz_var]=&PetscFEMSystem::getExternalFlux_Z;
     }
   else
     {// set pointers to interstitial applicator
-     this->m_MathModel.InitValues[ this->e_var]=&PDEModelBaseClass::getInterstitialIrradiance;
-     this->m_MathModel.InitValues[this->fx_var]=&PDEModelBaseClass::getInterstitialFlux_X;
-     this->m_MathModel.InitValues[this->fy_var]=&PDEModelBaseClass::getInterstitialFlux_Y;
-     this->m_MathModel.InitValues[this->fz_var]=&PDEModelBaseClass::getInterstitialFlux_Z;
+     this->InitValues[ this->e_var]=&PetscFEMSystem::getInterstitialIrradiance;
+     this->InitValues[this->fx_var]=&PetscFEMSystem::getInterstitialFlux_X;
+     this->InitValues[this->fy_var]=&PetscFEMSystem::getInterstitialFlux_Y;
+     this->InitValues[this->fz_var]=&PetscFEMSystem::getInterstitialFlux_Z;
     }
 }
 
@@ -981,7 +976,7 @@ template< typename MathematicalModel  >
 bool RHTESystem< MathematicalModel >::
 element_time_derivative (bool request_jacobian, DiffContext &context)
 {
-  PetscFEMContext &c = libmesh_cast_ref<PetscFEMContext&>(context);
+  FEMContext &c = libmesh_cast_ref<FEMContext&>(context);
 
   // Initialize the per-element data for elem.
   std::vector<unsigned int> param_dof_indices;
@@ -1043,20 +1038,19 @@ element_time_derivative (bool request_jacobian, DiffContext &context)
   for (unsigned int qp=0; qp != n_qpoints; qp++)
     {
       // Compute the solution & its gradient 
-      Number u_theta  = c.interior_theta_value(   this->u_var,qp);
-      Number delta_u  = c.interior_diff_value(    this->u_var,qp);
-      Gradient grad_u = c.interior_theta_gradient(this->u_var,qp);
+      Number u_theta  = c.interior_value(   this->u_var,qp);
+      Gradient grad_u = c.interior_gradient(this->u_var,qp);
       Number z_value  = c.interior_value(         this->z_var,qp);
       Gradient grad_z = c.interior_gradient(      this->z_var,qp);
       // get irradiance values
-      Number  e_value = c.interior_theta_value(   this->e_var,qp); // irradiance value
-      Number  e_s0_x  = c.interior_theta_value(  this->fx_var,qp); // irradiance flux in x direction
-      Number  e_s0_y  = c.interior_theta_value(  this->fy_var,qp); // irradiance flux in y direction
-      Number  e_s0_z  = c.interior_theta_value(  this->fz_var,qp); // irradiance flux in z direction
+      Number  e_value = c.interior_value(   this->e_var,qp); // irradiance value
+      Number  e_s0_x  = c.interior_value(  this->fx_var,qp); // irradiance flux in x direction
+      Number  e_s0_y  = c.interior_value(  this->fy_var,qp); // irradiance flux in y direction
+      Number  e_s0_z  = c.interior_value(  this->fz_var,qp); // irradiance flux in z direction
       Gradient e_s0(e_s0_x,e_s0_y,e_s0_z); //irradiance flux 
       // get damage values
-      Number  damage  = c.interior_theta_value(   this->a_var,qp);
-      Number DdamageDu= c.interior_theta_value(   this->b_var,qp);
+      Number  damage  = c.interior_value(   this->a_var,qp);
+      Number DdamageDu= c.interior_value(   this->b_var,qp);
 
       // First, an i-loop over the velocity degrees of freedom.
       // We know that n_u_dofs == n_v_dofs so we can compute contributions
@@ -1080,10 +1074,7 @@ element_time_derivative (bool request_jacobian, DiffContext &context)
                            +    // diffusion term
                 this->m_MathModel.ThermalConductivity(field_id,u_theta,damage) *
                                                        (grad_u * dphi[i][qp])
-		) * this->m_MathModel.TimeDerivativeScalingFactor();
-          // transient term
-          if( this->m_MathModel.TransientTerm(subdomain_id) )  
-              Fu(i) += JxW[qp] * delta_u / this->deltat * phi[i][qp] ;
+		) ;
 
           // Matrix contributions for the uu and vv couplings.
           if (request_jacobian)
@@ -1105,17 +1096,13 @@ element_time_derivative (bool request_jacobian, DiffContext &context)
                       this->m_MathModel.dThermalConductivitydu(field_id,
                                                      u_theta,damage,DdamageDu) *
                                           ( grad_u * dphi[i][qp] ) * phi[j][qp]
-		) * c.ThetaValue(this->u_var) 
-                  * this->m_MathModel.TimeDerivativeScalingFactor();
-                // transient component
-                if( this->m_MathModel.TransientTerm(subdomain_id) )  
-                    Kuu(i,j) += JxW[qp] / this->deltat * phi[i][qp] * phi[j][qp];
+		) ;
                 // coupling terms
                 Kuz(i,j) += JxW[qp] * (
                            -   phi[i][qp] *  // source term 
                   this->m_MathModel.ScatteredSource(field_id,u_theta,damage,psi[j][qp]) 
 
-		) * this->m_MathModel.TimeDerivativeScalingFactor();
+		) ;
               }
 
         }
@@ -1155,10 +1142,10 @@ bool RHTESystem< MathematicalModel >::
 side_time_derivative(bool request_jacobian,DiffContext &context)
 {
   // call parent by default
-  Parent::side_time_derivative(request_jacobian,&context);
+  Parent::side_time_derivative(request_jacobian,context);
 
   // continue with off diagonal updates
-  PetscFEMContext &c = libmesh_cast_ref<PetscFEMContext&>(context);
+  FEMContext &c = libmesh_cast_ref<FEMContext&>(context);
 
   // get the number of variable in the state system
   const unsigned int n_vars = this->n_vars();
@@ -1191,6 +1178,7 @@ side_time_derivative(bool request_jacobian,DiffContext &context)
   
   // The shape functions at side quadrature points.
   const std::vector<std::vector<Real> >& phi_side = c.side_fe_var[this->u_var]->get_phi();
+  const std::vector<std::vector<Real> >& psi_side = c.side_fe_var[this->z_var]->get_phi();
   
   // Physical location of the quadrature points on the side
   const std::vector<Point>& qpoint = c.side_fe_var[this->u_var]->get_xyz();
@@ -1208,7 +1196,7 @@ side_time_derivative(bool request_jacobian,DiffContext &context)
     // residual
     for (unsigned int qp=0; qp != n_sidepoints; qp++)
       {
-      Number u_theta  = c.side_theta_value(   this->u_var,qp);
+      Number u_theta  = c.side_value(   this->u_var,qp);
       Number z_value  = c.side_value(         this->z_var,qp);
         // loop over the fluence degrees of freedom.  
         if (request_jacobian)
@@ -1216,13 +1204,28 @@ side_time_derivative(bool request_jacobian,DiffContext &context)
           {
               for (unsigned int j=0; j != n_z_dofs; j++)
                 {
-                  Kuz(i,j) += JxW_side[qp] * psi_side[i][qp] * phi_side[j][qp] *
-                  this->m_MathModel.FluenceOffDiagonalBoundary(c,qp, field_id, 
-                                                                 qpoint[qp], es.parameters) 
-                  	          * c.ThetaValue(this->u_var) ;
+                  Kuz(i,j) += JxW_side[qp] * psi_side[i][qp] * phi_side[j][qp] * 1.0;
+                  libmesh_not_implemented();
+                  //this->m_MathModel.FluenceOffDiagonalBoundary(c,qp, field_id, 
+                  //                                               qpoint[qp], es.parameters) ;
                 }
           }
       } // end quadrature loop
 
   return request_jacobian;
+}
+// element assembly
+template< typename MathematicalModel  >
+void RHTESystem< MathematicalModel >::
+UpdateBoundaryData(DiffContext &context,const unsigned int qp,
+                       const int domainId,  const int timeId,
+                       const Point &qpoint, const Parameters& parameters )
+{
+  FEMContext &c = libmesh_cast_ref<FEMContext&>(context);
+  Number u_theta  = c.side_value(this->u_var, qp);
+  Number  damage  = c.side_value(   this->a_var,qp);
+  //this->m_MathModel.UpdateBoundaryData(u_theta,damage,
+  //                                     domainId,  timeId,
+  //                                     qpoint, parameters );
+  return;
 }
