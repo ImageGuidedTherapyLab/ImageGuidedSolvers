@@ -730,9 +730,11 @@ public:
   virtual void SetupDirichlet(libMesh::MeshBase& );
   virtual void ApplyDirichlet (); 
   
-  // Element residual and jacobian calculations
-  // Time dependent parts (Doxygen at definition below)
+  /// Element residual and jacobian calculations
   virtual bool element_time_derivative (bool , DiffContext& );
+
+  /// BC computes off diag terms 
+  virtual bool side_time_derivative(    bool , DiffContext& );
 
   // Indices for temperature, damage, damage derivative; respectively
   unsigned int u_var, a_var, b_var;
@@ -813,6 +815,9 @@ public:
   /** Assemble System Dynamics Matrix and Load Vector */
   virtual bool element_time_derivative (bool request_jacobian,
                                         DiffContext& context);
+
+  /// BC
+  virtual bool side_time_derivative(    bool , DiffContext& );
 
   // setup dirichlet
   virtual void SetupDirichlet(libMesh::MeshBase& );

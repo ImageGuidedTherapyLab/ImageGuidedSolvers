@@ -20,44 +20,19 @@ public:
    */
   ThermalTherapySystem (EquationSystems& es,
                           const std::string& name,
-                          const unsigned int number ) ;
+                          const unsigned int number ) { };
 
   /**
    * The type of the parent.
    */
   typedef PetscFEMSystem Parent;
   
-  /**
-   * setup intial conditions 
-   */
-  virtual void SetupInitialConditions ();
   
   /**
    * scatter global parameters to all locally
    */
   virtual void ScatterParametersLocally()
     { this->m_MathModel.ScatterParametersLocally(); }
-
-  /**
-   * Builds a FEMContext object with enough information to do
-   * evaluations on each element.
-   *
-   * For most problems, the default FEMSystem implementation is correct; users
-   * who subclass FEMContext will need to also reimplement this method to build
-   * it.
-   */
-  virtual AutoPtr<DiffContext> build_context();
-
-  /**
-   * BC
-   */
-  virtual bool side_time_derivative(bool request_jacobian,
-                                    DiffContext& context);
-
-  /**
-   * setup dirichlet data
-   */
-  virtual void SetupDirichlet(libMesh::MeshBase& );
 
   /** 
     * Print constitutive data parameters 
@@ -202,12 +177,6 @@ public:
 
 protected:
   
-
-  /**
-   * Initializes the member data fields associated with
-   * the system, so that, e.g., \p assemble() may be used.
-   */
-  virtual void init_data ();
 
 /*
   not needed??? why put solution into all vectors?

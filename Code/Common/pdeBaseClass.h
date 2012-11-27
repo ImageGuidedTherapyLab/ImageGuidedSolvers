@@ -213,13 +213,6 @@ public:
   /** Print the Constitutive Data */
   virtual void printSelf(std::ostream& );
 
-  // member function pointers for boundary conditions
-  typedef PetscScalar (PDEModelBaseClass::*ResidualBCMemFn)(const unsigned int, const Real &,
-                                                            int , const int ,
-                                                            const Point & , const Parameters&) ;
-  typedef PetscScalar (PDEModelBaseClass::*JacobianBCMemFn)(const unsigned int, int,
-                                                            const Point &, const Parameters& );
-
  // member function pointers for boundary conditions
  typedef void (PDEModelBaseClass::*pdeJacobianBCMemFn)(const unsigned int , libMesh::QGauss &,
                                     const std::vector<Real>& ,
@@ -237,19 +230,7 @@ public:
                                const std::vector<Real>&, DenseVector<Number> &,
                                TransientFEMSystem &,
                                TransientFEMSystem &);
-#define CALL_MEMBER_FN(object,ptrToMember)  ((object)->*(ptrToMember))
-#define CALL_MEMBER_FN_W_REF(object,ptrToMember)  ((object).*(ptrToMember))
 
-  /** 
-   * boundary conditions member function pointers to 
-   *     - jacobianNothingBC
-   *     - jacobianCauchyBC
-   *     - residualNothingBC
-   *     - residualNeumannBC
-   *     - residualCauchyBC
-   */
-  ResidualBCMemFn    ResidualBC[5];
-  JacobianBCMemFn    JacobianBC[5];
   //boundary conditions
   pdeJacobianBCMemFn    accumulateJacobianBC[5];
   pdeAdjointLoadBCMemFn accumulateAdjointLoadBC[5];
@@ -257,13 +238,6 @@ public:
 
   /** nodal dirichlet data */
   virtual bool dirichletNodalData( Point &) {return false;}
- 
-  /** typedefs to make function pointer declarations more readable */
-  typedef PetscScalar(PDEModelBaseClass::*ICMemFn)(unsigned int,unsigned int,
-                                           const Point&, const Parameters& ) ;
-
-  /** initial condition function pointers */
-  std::vector<ICMemFn>  InitValues;
  
   /** voltage initial condition. overwritten in derived class*/
   virtual PetscScalar getInitialVoltage(unsigned int,unsigned int,
@@ -439,7 +413,6 @@ upper-packed storage mode:
   PetscTruth  TransientTerm(const unsigned int DomainID) 
                   {return m_TransientDomain[DomainID];}
 
-  PetscInt    get_num_elem_blk(){     return n_block ; }
 protected:
 
   /**
@@ -447,8 +420,6 @@ protected:
    * used for the simulation.
    */
   EquationSystems& _equation_systems;
-
-  PetscInt n_block;     ///< # of mesh blocks
 
   /**
    *  return PETSC_TRUE if solving time dependent equations  

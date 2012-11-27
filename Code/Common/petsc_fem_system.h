@@ -6,9 +6,11 @@
 // libmesh includes
 #include "numeric_vector.h"
 #include "fem_system.h"
-#include "fem_context.h"
+#include "petsc_fem_context.h" 
 
 class optimizationParameter; //forward declaration
+#define CALL_MEMBER_FN(object,ptrToMember)  ((object)->*(ptrToMember))
+#define CALL_MEMBER_FN_W_REF(object,ptrToMember)  ((object).*(ptrToMember))
 
 /**
  * Common Routines for libmesh with PETSc Solvers 
@@ -81,39 +83,32 @@ public:
   virtual void SetupOptimizationVariables( std::vector<optimizationParameter*> &)
     {libmesh_error();return;}
 
+  /** typedefs to make function pointer declarations more readable */
+  typedef PetscScalar(PetscFEMSystem::*ICMemFn)(unsigned int,unsigned int,
+                                           const Point&, const Parameters& ) ;
+
+  /** initial condition function pointers */
+  std::vector<ICMemFn>  InitValues;
+ 
+  /**
+   * setup dirichlet data
+   */
+  virtual void SetupDirichlet(libMesh::MeshBase& );
+
   /**
    * setup intial conditions 
    */
-  virtual void SetupInitialConditions ()
-    {libmesh_error();return;}
-
-  /** pre FEMSystem adjoint assembly 
-   *  @todo {separate adjoint load & matrix will achieve SIGNIFICANT speed
-   *         increase}
-   */
-  virtual void assemble_adjoint(EquationSystems&)
-    {libmesh_error();return;}
-
-  /** adjoint gradient */
-  virtual PetscErrorCode FormGradient(Vec , Vec )
-    {libmesh_error();return 0;}
-
-  /** hessian vector product */
-  virtual PetscErrorCode hessianVectorProduct(Mat , Vec , Vec )
-    {libmesh_error();return 0;}
-
-  /** write out data for checkpoint */
-  virtual PetscErrorCode 
-          WriteControlFile(PetscInt,PetscInt){PetscFunctionReturn(0);}
-  /** setup optimization variables */
-  virtual PetscErrorCode GetDataFromDisk(libMesh::MeshBase &,std::string &)
-    {libmesh_error();return 0;}
+  virtual void SetupInitialConditions ();
 
   /**
-   *  pre FEMSystem setup Adjoint
+   * Builds a FEMContext object with enough information to do
+   * evaluations on each element.
+   *
+   * For most problems, the default FEMSystem implementation is correct; users
+   * who subclass FEMContext will need to also reimplement this method to build
+   * it.
    */
-  virtual void SetupAdjoint( const unsigned int ) 
-    {libmesh_error();return ;}
+  virtual AutoPtr<DiffContext> build_context();
 
   //-----------------------------------------------------------------
   // access to the solution data fields
@@ -194,8 +189,39 @@ public:
       return; 
     }
 
+  PetscInt    get_num_elem_blk(){     return n_block ; }
+
+  virtual void ScatterParametersLocally() = 0 ; 
+  // member function pointers for boundary conditions
+  typedef PetscScalar (PetscFEMSystem::*ResidualBCMemFn)(const unsigned int,  const Real & );
+  typedef PetscScalar (PetscFEMSystem::*JacobianBCMemFn)(const unsigned int);
+
+  /** 
+   * boundary conditions member function pointers to 
+   *     - jacobianNothingBC
+   *     - jacobianCauchyBC
+   *     - residualNothingBC
+   *     - residualNeumannBC
+   *     - residualCauchyBC
+   */
+  std::vector< std::vector<ResidualBCMemFn> > ResidualBC;
+  std::vector< std::vector<JacobianBCMemFn>  >  JacobianBC;
+  
+  /// BC computes diagonal terms only, off diag terms computed in derived class
+  bool side_time_derivative(bool request_jacobian,DiffContext &context);
 protected:
   
+  PetscInt n_block;     ///< # of mesh blocks
+
+  /// BC data does note need update by default
+  virtual void UpdateBoundaryData(PetscFEMContext &,const unsigned int){}
+
+  /**
+   * Initializes the member data fields associated with
+   * the system, so that, e.g., \p assemble() may be used.
+   */
+  virtual void init_data ();
+
   std::vector< std::vector<unsigned int> > m_subvector_indices;
   std::vector<VecScatter>                  m_subvector_scatter;
   std::vector<IS>                          m_subvector_is;

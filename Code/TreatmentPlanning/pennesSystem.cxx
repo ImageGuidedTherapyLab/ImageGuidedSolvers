@@ -20,7 +20,6 @@
 //local
 #include "pennesModel.h" // Constitutive data
 #include "thermal_therapy_system.h"
-#include "petsc_fem_context.h" 
 #include "thermal_therapy_system.txx"
 #include "pennesSystem.h"
 #include "pennesSystem.txx"

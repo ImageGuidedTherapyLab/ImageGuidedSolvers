@@ -1,6 +1,22 @@
 #ifndef __PennesModel_h
 #define __PennesModel_h
-#include "pdeBaseClass.h"
+// libmesh types
+#include "exodusII_io.h" 
+#include "numeric_vector.h"
+#include "vector_value.h"
+#include "dense_matrix.h"
+#include "dense_vector.h"
+#include "o_string_stream.h"
+#include "getpot.h"
+
+// For systems of equations the \p DenseSubMatrix
+// and \p DenseSubVector provide convenient ways for
+// assembling the element matrix and vector on a
+// component-by-component basis.
+#include "dense_submatrix.h"
+#include "dense_subvector.h"
+// class for optimization paramters
+#include "optimizationParameter.h"
 
 
 /**@ingroup TreatmentPlanning 
@@ -298,7 +314,7 @@
  * \f]
  *
  */
-class PennesBioheatModel : public PDEModelBaseClass 
+class PennesBioheatModel 
 {
 public:
   // constructor
@@ -912,11 +928,13 @@ public:
   *   - \nabla \phi \cdot \hat{n}  = \frac{1}{Ah} (\phi +  A h 3 g^*  \mu_s^* E(r,z))
   * \f]
   */
- virtual PetscScalar residualFluenceBC(const unsigned int i_var, const Real &fluence,
+ virtual PetscScalar residualFluenceBC(Real &u_theta, Real &fluence,
                                        int domainId, const int timeId,
                              const Point &qpoint, const Parameters& parameters )
  {
    //FIXME design flaw in BC, assume linear for now
+
+   // Compute the solution at the theta timestep
    Real u_theta = m_bodyTemp, damage = 0.0;
    Real mu_tr=this->absorption(domainId,u_theta,damage)
              +this->scattering(domainId,u_theta,damage)*(1.0e0-anfact);
