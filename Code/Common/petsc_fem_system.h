@@ -261,22 +261,15 @@ public:
   std::vector< std::vector<ResidualBCMemFn> > ResidualBC;
   std::vector< std::vector<JacobianBCMemFn>  >  JacobianBC;
   
-  /// BC computes diagonal terms only, off diag terms computed in derived class
-  bool side_time_derivative(bool request_jacobian,DiffContext &context);
-
   // return true if this is a linear solve
   PetscTruth  LinearPDE()
          {return m_LinearPDE;}
 
   //boundary conditions  can be overridden in derived class if necessary
   // the member function pointer will call the derived class function
-  virtual PetscScalar residualNothingBC(const unsigned int ,const Real &,
-                                        int , const int ,
-                                        const Point &, const Parameters& )
+  virtual PetscScalar residualNothingBC(const unsigned int ,const Real &)
     { return 0.0; }
-  virtual PetscScalar residualNeumannBC(const unsigned int i_var,const Real &,
-                                        int , const int ,
-                                        const Point & , const Parameters&)
+  virtual PetscScalar residualNeumannBC(const unsigned int i_var,const Real &)
     { return m_NeumannFlux[i_var]; }
   /**
    * Cauchy boundary data for each variable
@@ -284,16 +277,12 @@ public:
    *    h(u - u_\infty)
    * \f]
    */
-  virtual PetscScalar residualCauchyBC( const unsigned int i_var, const Real &temperature,
-                                        int , const int ,
-                                        const Point & , const Parameters& )
-    { return m_newton_coeff[i_var]*(temperature-m_u_infty[i_var]) ; }
+  virtual PetscScalar residualCauchyBC( const unsigned int i_var, const Real &varValue)
+    { return m_newton_coeff[i_var]*(varValue-m_u_infty[i_var]) ; }
 
-  virtual PetscScalar jacobianNothingBC(const unsigned int , int,
-                                        const Point & , const Parameters& )
+  virtual PetscScalar jacobianNothingBC(const unsigned int )
     { return 0.0; }
-  virtual PetscScalar jacobianCauchyBC(const unsigned int i_var, int,
-                                       const Point &, const Parameters& )
+  virtual PetscScalar jacobianCauchyBC(const unsigned int i_var)
     { return m_newton_coeff[i_var]; }
   PetscInt    get_num_elem_blk(){     return n_block ; }
 

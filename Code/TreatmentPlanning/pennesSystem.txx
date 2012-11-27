@@ -382,6 +382,83 @@ element_time_derivative (bool request_jacobian, DiffContext &context)
   
   return request_jacobian;
 }
+// boundary conditions
+template< typename MathematicalModel  >
+bool BioHeatSystem< MathematicalModel >::
+side_time_derivative(bool request_jacobian, DiffContext &context)
+{
+  FEMContext &c = libmesh_cast_ref<FEMContext&>(context);
+
+  // get the number of variable in the state system
+  const unsigned int n_vars = this->n_vars();
+  const DofMap& dof_map = this->get_dof_map();
+
+  // reference to equation systems
+  EquationSystems & es = this->get_equation_systems();
+
+  // set the field id in the spatially varying data structures
+  // Initialize the per-element data for elem.
+  std::vector<unsigned int> param_dof_indices;
+  libMesh::System &template_parameter_system = 
+                      this->get_equation_systems().get_system("k_0");
+  template_parameter_system.get_dof_map().dof_indices (c.elem, param_dof_indices);
+
+  // current_solution calls map_global_to_local_index that will map
+  // this global index to the local current_local_solution
+  const unsigned int field_id = param_dof_indices[0];
+
+  // Here we define some references to cell-specific data that
+  // will be used to assemble the linear system.
+  unsigned int n_sidepoints = c.side_qrule->n_points();
+
+  for (unsigned int qp=0; qp != n_sidepoints; qp++)
+    {
+      // loop over variables and compute diagonal terms only
+      // derive classes call this for off diag terms 
+      // Compute the solution at the theta timestep
+      Number u_theta  = c.side_value(this->u_var, qp);
+
+      // residual and jacobian for this variable
+      DenseSubMatrix<Number> &Kuu = *c.elem_subjacobians[this->u_var][this->u_var];
+      DenseSubVector<Number> &Fu = *c.elem_subresiduals[this->u_var];
+
+      // Element Jacobian * quadrature weight for side integration
+      const std::vector<Real> &JxW_side = c.side_fe_var[this->u_var]->get_JxW();
+      
+      // The velocity shape functions at side quadrature points.
+      const std::vector<std::vector<Real> >& phi_side =
+        c.side_fe_var[this->u_var]->get_phi();
+      
+      // Physical location of the quadrature points on the side
+      const std::vector<Point>& qpoint = c.side_fe_var[this->u_var]->get_xyz();
+      
+      // The number of local degrees of freedom in u and v
+      const unsigned int n_dofs = c.dof_indices_var[this->u_var].size(); 
+
+      // bc_id = 3 ==> cauchy
+      // bc_id = 2 ==> neumann
+      short int bc_id =
+        this->get_mesh().boundary_info->boundary_id(c.elem, c.side);
+      libmesh_assert (bc_id != BoundaryInfo::invalid_id);
+
+      for (unsigned int i=0; i != n_dofs; i++)
+        {
+          Fu(i) += JxW_side[qp] * phi_side[i][qp] *
+                   // add bc to residual
+                   CALL_MEMBER_FN(this, this->ResidualBC[bc_id][this->u_var])(this->u_var,u_theta);
+
+          if (request_jacobian)
+            for (unsigned int j=0; j != n_dofs; j++)
+              {
+                Kuu(i,j) += JxW_side[qp] * phi_side[i][qp] * phi_side[j][qp] *
+                            // add bc to jacobian
+                   CALL_MEMBER_FN(this, this->JacobianBC[bc_id][this->u_var])(this->u_var) ;
+              }
+        }
+    } // end quadrature loop
+
+  return request_jacobian;
+}
 /* --------------Pre Assembly for Dirichlet BC ---------- */
 // called before nonlinear solve to setup diriclet BC
 #undef __FUNCT__
@@ -834,6 +911,84 @@ dphi[j][qp] ) ;
               }
 
         }
+    } // end of the quadrature point qp-loop
+  
+  return request_jacobian;
+}
+template< typename MathematicalModel  >
+bool RFASystem< MathematicalModel >::
+element_constraint (bool request_jacobian, DiffContext &context)
+{
+  FEMContext &c = libmesh_cast_ref<FEMContext&>(context);
+
+  // Initialize the per-element data for elem.
+  std::vector<unsigned int> param_dof_indices;
+  typename libMesh::System &template_parameter_system = 
+                      this->get_equation_systems().get_system("s_0");
+  template_parameter_system.get_dof_map().dof_indices (c.elem, param_dof_indices);
+
+  // current_solution calls map_global_to_local_index that will map
+  // this global index to the local current_local_solution
+  const unsigned int field_id = param_dof_indices[0];
+  const unsigned int subdomain_id = static_cast<int>( c.elem->subdomain_id() ) -1 ;
+
+  // First we get some references to cell-specific data that
+  // will be used to assemble the linear system.
+
+  // Element Jacobian * quadrature weights for interior integration
+  const std::vector<Real> &JxW = 
+    c.element_fe_var[this->u_var]->get_JxW();
+
+  // shape function and shape function gradients at interior
+  // quadrature points. generally phi = psi but used different shape functions
+  // for illustrative purposes
+  const std::vector<std::vector<Real> >& phi =
+    c.element_fe_var[this->u_var]->get_phi();
+  const std::vector<std::vector<Real> >& psi =
+    c.element_fe_var[this->z_var]->get_phi();
+  //const std::vector<std::vector<Real> >& psi =
+  //  c.element_fe_var[this->z_var]->get_phi();
+  const std::vector<std::vector<RealGradient> >& dphi =
+    c.element_fe_var[this->u_var]->get_dphi();
+  const std::vector<std::vector<RealGradient> >& dpsi =
+    c.element_fe_var[this->z_var]->get_dphi();
+
+  // Physical location of the quadrature points
+  const std::vector<Point>& qpoint = 
+    c.element_fe_var[this->u_var]->get_xyz();
+
+  // The number of local degrees of freedom in each variable
+  const unsigned int n_u_dofs = c.dof_indices_var[this->u_var].size(); 
+  const unsigned int n_z_dofs = c.dof_indices_var[this->z_var].size(); 
+ 
+  // The subvectors and submatrices we need to fill:
+  //const unsigned int dim = this->get_mesh().mesh_dimension();
+  DenseSubMatrix<Number> &Kuu = *c.elem_subjacobians[this->u_var][this->u_var];
+  DenseSubMatrix<Number> &Kzz = *c.elem_subjacobians[this->z_var][this->z_var];
+  DenseSubMatrix<Number> &Kuz = *c.elem_subjacobians[this->u_var][this->z_var];
+  DenseSubMatrix<Number> &Kzu = *c.elem_subjacobians[this->z_var][this->u_var];
+  DenseSubVector<Number> &Fu = *c.elem_subresiduals[this->u_var];
+  DenseSubVector<Number> &Fz = *c.elem_subresiduals[this->z_var];
+      
+  // Now we will build the element Jacobian and residual.
+  // Constructing the residual requires the solution and its
+  // gradient from the previous timestep.  This must be
+  // calculated at each quadrature point by summing the
+  // solution degree-of-freedom values by the appropriate
+  // weight functions.
+  unsigned int n_qpoints = c.element_qrule->n_points();
+
+  for (unsigned int qp=0; qp != n_qpoints; qp++)
+    {
+      // Compute the solution & its gradient at the old Newton iterate
+      Number u_theta  = c.interior_value(   this->u_var,qp);
+      Gradient grad_u = c.interior_gradient(this->u_var,qp);
+      Number z_value  = c.interior_value(   this->z_var,qp);
+      Gradient grad_z = c.interior_gradient(this->z_var,qp);
+      // get damage values
+      Number  damage  = c.interior_value(   this->a_var,qp);
+      Number DdamageDu= c.interior_value(   this->b_var,qp);
+
       // Now a loop over the voltage degrees of freedom.  This
       // computes the contributions of the continuity equation.
       for (unsigned int i=0; i != n_z_dofs; i++)
@@ -852,6 +1007,89 @@ dphi[j][qp] ) ;
         }
     } // end of the quadrature point qp-loop
   
+  return request_jacobian;
+}
+// boundary conditions  pick up off diagonal terms
+template< typename MathematicalModel  >
+bool RFASystem< MathematicalModel >::
+side_constraint(bool request_jacobian,DiffContext &context)
+{
+  // call parent by default
+  Parent::side_time_derivative(request_jacobian,context);
+
+  // continue with off diagonal updates
+  FEMContext &c = libmesh_cast_ref<FEMContext&>(context);
+
+  // get the number of variable in the state system
+  const unsigned int n_vars = this->n_vars();
+  const DofMap& dof_map = this->get_dof_map();
+
+  // reference to equation systems
+  EquationSystems & es = this->get_equation_systems();
+
+  // set the field id in the spatially varying data structures
+  // Initialize the per-element data for elem.
+  std::vector<unsigned int> param_dof_indices;
+  libMesh::System &template_parameter_system = 
+                      this->get_equation_systems().get_system("k_0");
+  template_parameter_system.get_dof_map().dof_indices (c.elem, param_dof_indices);
+
+  // current_solution calls map_global_to_local_index that will map
+  // this global index to the local current_local_solution
+  const unsigned int field_id = param_dof_indices[0];
+
+  // Here we define some references to cell-specific data that
+  // will be used to assemble the linear system.
+  unsigned int n_sidepoints = c.side_qrule->n_points();
+
+  // The subvectors and submatrices we need to fill:
+  //const unsigned int dim = this->get_mesh().mesh_dimension();
+  DenseSubVector<Number> &Fz  = *c.elem_subresiduals[this->z_var];
+  DenseSubMatrix<Number> &Kzz = *c.elem_subjacobians[this->z_var][this->z_var];
+  DenseSubMatrix<Number> &Kuz = *c.elem_subjacobians[this->u_var][this->z_var];
+
+  // Element Jacobian * quadrature weight for side integration
+  const std::vector<Real> &JxW_side = c.side_fe_var[this->u_var]->get_JxW();
+  
+  // The shape functions at side quadrature points.
+  const std::vector<std::vector<Real> >& phi_side = c.side_fe_var[this->u_var]->get_phi();
+  const std::vector<std::vector<Real> >& psi_side = c.side_fe_var[this->z_var]->get_phi();
+  
+  // Physical location of the quadrature points on the side
+  const std::vector<Point>& qpoint = c.side_fe_var[this->u_var]->get_xyz();
+  
+  // The number of local degrees of freedom in u and v
+  const unsigned int n_u_dofs = c.dof_indices_var[this->u_var].size(); 
+  const unsigned int n_z_dofs = c.dof_indices_var[this->z_var].size(); 
+
+  // bc_id = 3 ==> cauchy
+  // bc_id = 2 ==> neumann
+  short int bc_id =
+    this->get_mesh().boundary_info->boundary_id(c.elem, c.side);
+  libmesh_assert (bc_id != BoundaryInfo::invalid_id);
+
+    // residual
+    for (unsigned int qp=0; qp != n_sidepoints; qp++)
+      {
+      Number u_theta  = c.side_value(   this->u_var,qp);
+      Number z_value  = c.side_value(         this->z_var,qp);
+        // loop over the fluence degrees of freedom.  
+        if (request_jacobian)
+        for (unsigned int i=0; i != n_z_dofs; i++)
+          {
+            Fz(i) += JxW_side[qp] * phi_side[i][qp] *
+                     // add bc to residual
+                     CALL_MEMBER_FN(this, this->ResidualBC[bc_id][this->z_var])(this->z_var,u_theta);
+            if (request_jacobian)
+              for (unsigned int j=0; j != n_z_dofs; j++)
+                {
+                  Kzz(i,j) += JxW_side[qp] * phi_side[i][qp] * phi_side[j][qp] *
+                              // add bc to jacobian
+                     CALL_MEMBER_FN(this, this->JacobianBC[bc_id][this->z_var])(this->z_var) ;
+                }
+          }
+      } // end quadrature loop
+
   return request_jacobian;
 }
 
@@ -1106,6 +1344,92 @@ element_time_derivative (bool request_jacobian, DiffContext &context)
               }
 
         }
+    } // end of the quadrature point qp-loop
+  
+  return request_jacobian;
+}
+
+// element assembly
+template< typename MathematicalModel  >
+bool RHTESystem< MathematicalModel >::
+element_constraint (bool request_jacobian, DiffContext &context)
+{
+  FEMContext &c = libmesh_cast_ref<FEMContext&>(context);
+
+  // Initialize the per-element data for elem.
+  std::vector<unsigned int> param_dof_indices;
+  typename libMesh::System &template_parameter_system = 
+                      this->get_equation_systems().get_system("k_0");
+  template_parameter_system.get_dof_map().dof_indices (c.elem, param_dof_indices);
+
+  // current_solution calls map_global_to_local_index that will map
+  // this global index to the local current_local_solution
+  const unsigned int field_id = param_dof_indices[0];
+  const unsigned int subdomain_id = static_cast<int>( c.elem->subdomain_id() ) -1 ;
+
+  // First we get some references to cell-specific data that
+  // will be used to assemble the linear system.
+
+  // Element Jacobian * quadrature weights for interior integration
+  const std::vector<Real> &JxW = 
+    c.element_fe_var[this->u_var]->get_JxW();
+
+  // shape function and shape function gradients at interior
+  // quadrature points. generally phi = psi but used different shape functions
+  // for illustrative purposes
+  const std::vector<std::vector<Real> >& phi =
+    c.element_fe_var[this->u_var]->get_phi();
+  const std::vector<std::vector<Real> >& psi =
+    c.element_fe_var[this->z_var]->get_phi();
+  //const std::vector<std::vector<Real> >& psi =
+  //  c.element_fe_var[this->z_var]->get_phi();
+  const std::vector<std::vector<RealGradient> >& dphi =
+    c.element_fe_var[this->u_var]->get_dphi();
+  const std::vector<std::vector<RealGradient> >& dpsi =
+    c.element_fe_var[this->z_var]->get_dphi();
+
+  // Physical location of the quadrature points
+  const std::vector<Point>& qpoint = 
+    c.element_fe_var[this->u_var]->get_xyz();
+ 
+  // The number of local degrees of freedom in each variable
+  const unsigned int n_u_dofs = c.dof_indices_var[this->u_var].size(); 
+  const unsigned int n_z_dofs = c.dof_indices_var[this->z_var].size(); 
+
+  // The subvectors and submatrices we need to fill:
+  //const unsigned int dim = this->get_mesh().mesh_dimension();
+  DenseSubMatrix<Number> &Kuu = *c.elem_subjacobians[this->u_var][this->u_var];
+  DenseSubMatrix<Number> &Kzz = *c.elem_subjacobians[this->z_var][this->z_var];
+  DenseSubMatrix<Number> &Kuz = *c.elem_subjacobians[this->u_var][this->z_var];
+  //DenseSubMatrix<Number> &Kzu = *c.elem_subjacobians[this->z_var][this->u_var];
+  DenseSubVector<Number> &Fu = *c.elem_subresiduals[this->u_var];
+  DenseSubVector<Number> &Fz = *c.elem_subresiduals[this->z_var];
+      
+  // Now we will build the element Jacobian and residual.
+  // Constructing the residual requires the solution and its
+  // gradient from the previous timestep.  This must be
+  // calculated at each quadrature point by summing the
+  // solution degree-of-freedom values by the appropriate
+  // weight functions.
+  unsigned int n_qpoints = c.element_qrule->n_points();
+
+  for (unsigned int qp=0; qp != n_qpoints; qp++)
+    {
+      // Compute the solution & its gradient 
+      Number u_theta  = c.interior_value(   this->u_var,qp);
+      Gradient grad_u = c.interior_gradient(this->u_var,qp);
+      Number z_value  = c.interior_value(         this->z_var,qp);
+      Gradient grad_z = c.interior_gradient(      this->z_var,qp);
+      // get irradiance values
+      Number  e_value = c.interior_value(   this->e_var,qp); // irradiance value
+      Number  e_s0_x  = c.interior_value(  this->fx_var,qp); // irradiance flux in x direction
+      Number  e_s0_y  = c.interior_value(  this->fy_var,qp); // irradiance flux in y direction
+      Number  e_s0_z  = c.interior_value(  this->fz_var,qp); // irradiance flux in z direction
+      Gradient e_s0(e_s0_x,e_s0_y,e_s0_z); //irradiance flux 
+      // get damage values
+      Number  damage  = c.interior_value(   this->a_var,qp);
+      Number DdamageDu= c.interior_value(   this->b_var,qp);
+
       // Now a loop over the fluence degrees of freedom.  This
       // computes the contributions of the continuity equation.
       for (unsigned int i=0; i != n_z_dofs; i++)
@@ -1135,11 +1459,10 @@ element_time_derivative (bool request_jacobian, DiffContext &context)
   
   return request_jacobian;
 }
-
 // boundary conditions  pick up off diagonal terms
 template< typename MathematicalModel  >
 bool RHTESystem< MathematicalModel >::
-side_time_derivative(bool request_jacobian,DiffContext &context)
+side_constraint(bool request_jacobian,DiffContext &context)
 {
   // call parent by default
   Parent::side_time_derivative(request_jacobian,context);
@@ -1171,6 +1494,8 @@ side_time_derivative(bool request_jacobian,DiffContext &context)
 
   // The subvectors and submatrices we need to fill:
   //const unsigned int dim = this->get_mesh().mesh_dimension();
+  DenseSubVector<Number> &Fz  = *c.elem_subresiduals[this->z_var];
+  DenseSubMatrix<Number> &Kzz = *c.elem_subjacobians[this->z_var][this->z_var];
   DenseSubMatrix<Number> &Kuz = *c.elem_subjacobians[this->u_var][this->z_var];
 
   // Element Jacobian * quadrature weight for side integration
@@ -1202,8 +1527,15 @@ side_time_derivative(bool request_jacobian,DiffContext &context)
         if (request_jacobian)
         for (unsigned int i=0; i != n_z_dofs; i++)
           {
+            Fz(i) += JxW_side[qp] * phi_side[i][qp] *
+                     // add bc to residual
+                     CALL_MEMBER_FN(this, this->ResidualBC[bc_id][this->z_var])(this->z_var,u_theta);
+            if (request_jacobian)
               for (unsigned int j=0; j != n_z_dofs; j++)
                 {
+                  Kzz(i,j) += JxW_side[qp] * phi_side[i][qp] * phi_side[j][qp] *
+                              // add bc to jacobian
+                     CALL_MEMBER_FN(this, this->JacobianBC[bc_id][this->z_var])(this->z_var) ;
                   Kuz(i,j) += JxW_side[qp] * psi_side[i][qp] * phi_side[j][qp] * 1.0;
                   libmesh_not_implemented();
                   //this->m_MathModel.FluenceOffDiagonalBoundary(c,qp, field_id, 

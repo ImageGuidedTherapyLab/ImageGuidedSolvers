@@ -48,6 +48,20 @@ PetscFEMSystem::PetscFEMSystem (EquationSystems& es,
   PetscLogEventRegister("PetscFEMSysJacobian",PETSC_VIEWER_COOKIE,&PetscFEMSysLogJacobian);
   PetscLogEventRegister("PetscFEMSysDefault" ,PETSC_VIEWER_COOKIE,&PetscFEMSysLogDefault );
 
+  // // default residual boundary conditions
+  // ResidualBC[0] = &PetscFEMSystem::residualNothingBC;
+  // ResidualBC[1] = &PetscFEMSystem::residualNothingBC;
+  // ResidualBC[2] = &PetscFEMSystem::residualNeumannBC;
+  // ResidualBC[3] = &PetscFEMSystem::residualCauchyBC;
+  // ResidualBC[4] = &PetscFEMSystem::residualNothingBC;
+
+  // // default jacobian boundary conditions
+  // JacobianBC[0] = &PetscFEMSystem::jacobianNothingBC;
+  // JacobianBC[1] = &PetscFEMSystem::jacobianNothingBC;
+  // JacobianBC[2] = &PetscFEMSystem::jacobianNothingBC;
+  // JacobianBC[3] = &PetscFEMSystem::jacobianCauchyBC;
+  // JacobianBC[4] = &PetscFEMSystem::jacobianNothingBC;
+
   // # of mesh blocks
   n_block=1;  
   libMesh::MeshBase &mesh = es.get_mesh();
@@ -653,89 +667,6 @@ void PetscFEMSystem::init_data ()
 
 }
 
-// boundary conditions
-bool PetscFEMSystem::side_time_derivative(bool request_jacobian,DiffContext &context)
-{
-  FEMContext &c = libmesh_cast_ref<FEMContext&>(context);
-
-  // get the number of variable in the state system
-  const unsigned int n_vars = this->n_vars();
-  const DofMap& dof_map = this->get_dof_map();
-
-  // reference to equation systems
-  EquationSystems & es = this->get_equation_systems();
-
-  // set the field id in the spatially varying data structures
-  // Initialize the per-element data for elem.
-  std::vector<unsigned int> param_dof_indices;
-  libMesh::System &template_parameter_system = 
-                      this->get_equation_systems().get_system("k_0");
-  template_parameter_system.get_dof_map().dof_indices (c.elem, param_dof_indices);
-
-  // current_solution calls map_global_to_local_index that will map
-  // this global index to the local current_local_solution
-  const unsigned int field_id = param_dof_indices[0];
-
-  // Here we define some references to cell-specific data that
-  // will be used to assemble the linear system.
-  unsigned int n_sidepoints = c.side_qrule->n_points();
-
-  for (unsigned int qp=0; qp != n_sidepoints; qp++)
-    {
-      // loop over variables and compute diagonal terms only
-      // derive classes call this for off diag terms 
-      for( unsigned int var = 0 ; var < n_vars ; var++)
-        { 
-        // Compute the solution at the theta timestep
-        Number u_theta  = c.side_value(var, qp);
-
-        // residual and jacobian for this variable
-        DenseSubMatrix<Number> &Kuu = *c.elem_subjacobians[var][var];
-        DenseSubVector<Number> &Fu = *c.elem_subresiduals[var];
-
-        // Element Jacobian * quadrature weight for side integration
-        const std::vector<Real> &JxW_side = c.side_fe_var[var]->get_JxW();
-      
-        // The velocity shape functions at side quadrature points.
-        const std::vector<std::vector<Real> >& phi_side =
-          c.side_fe_var[var]->get_phi();
-      
-        // Physical location of the quadrature points on the side
-        const std::vector<Point>& qpoint = c.side_fe_var[var]->get_xyz();
-      
-        // The number of local degrees of freedom in u and v
-        const unsigned int n_dofs = c.dof_indices_var[var].size(); 
-
-        // bc_id = 3 ==> cauchy
-        // bc_id = 2 ==> neumann
-        short int bc_id =
-          this->get_mesh().boundary_info->boundary_id(c.elem, c.side);
-        libmesh_assert (bc_id != BoundaryInfo::invalid_id);
-
-        // Compute the solution at the theta timestep
-        this->UpdateBoundaryData(c,qp,
-                                 field_id , this->m_PowerID,
-                                 qpoint[qp], es.parameters) ;
-
-        for (unsigned int i=0; i != n_dofs; i++)
-          {
-            Fu(i) += JxW_side[qp] * phi_side[i][qp] *
-                     // add bc to residual
-                     CALL_MEMBER_FN(this, this->ResidualBC[bc_id][var])(var,u_theta);
-
-            if (request_jacobian)
-              for (unsigned int j=0; j != n_dofs; j++)
-                {
-                  Kuu(i,j) += JxW_side[qp] * phi_side[i][qp] * phi_side[j][qp] *
-                              // add bc to jacobian
-                     CALL_MEMBER_FN(this, this->JacobianBC[bc_id][var])(var) ;
-                }
-          }
-      } // end loop over variables
-    } // end quadrature loop
-
-  return request_jacobian;
-}
 // wrapper for default assembly
 void PetscFEMSystem::assembly(bool get_residual, bool get_jacobian)
 {

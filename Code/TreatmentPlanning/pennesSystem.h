@@ -739,11 +739,9 @@ public:
   virtual void SetupDirichlet(libMesh::MeshBase& );
   virtual void ApplyDirichlet (); 
   
-  /// Element residual and jacobian calculations
+  /** Assemble System Dynamics Matrix and Load Vector */
   virtual bool element_time_derivative (bool , DiffContext& );
-
-  /// BC computes off diag terms 
-  virtual bool side_time_derivative(    bool , DiffContext& );
+  virtual bool side_time_derivative    (bool , DiffContext& );
 
   // Indices for temperature, damage, damage derivative; respectively
   unsigned int u_var, a_var, b_var;
@@ -780,8 +778,9 @@ public:
   virtual void ApplyDirichlet (); 
   
   /** Assemble System Dynamics Matrix and Load Vector */
-  virtual bool element_time_derivative (bool request_jacobian,
-                                        DiffContext& context);
+  virtual bool element_time_derivative (bool , DiffContext& );
+  virtual bool element_constraint      (bool , DiffContext& );
+  virtual bool side_constraint         (bool , DiffContext& );
 
   // Indices for voltage;  
   unsigned int z_var;
@@ -816,11 +815,9 @@ public:
    }
 
   /** Assemble System Dynamics Matrix and Load Vector */
-  virtual bool element_time_derivative (bool request_jacobian,
-                                        DiffContext& context);
-
-  /// BC
-  virtual bool side_time_derivative(    bool , DiffContext& );
+  virtual bool element_time_derivative (bool , DiffContext& );
+  virtual bool element_constraint      (bool , DiffContext& );
+  virtual bool side_constraint         (bool , DiffContext& );
 
   // setup dirichlet
   virtual void SetupDirichlet(libMesh::MeshBase& );

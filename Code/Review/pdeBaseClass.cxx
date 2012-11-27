@@ -25,20 +25,6 @@ PDEModelBaseClass::PDEModelBaseClass(GetPot &controlfile,EquationSystems &es):
   // default is a linear PDE 
   m_LinearPDE = PETSC_TRUE;
 
-  // default residual boundary conditions
-  ResidualBC[0] = &PDEModelBaseClass::residualNothingBC;
-  ResidualBC[1] = &PDEModelBaseClass::residualNothingBC;
-  ResidualBC[2] = &PDEModelBaseClass::residualNeumannBC;
-  ResidualBC[3] = &PDEModelBaseClass::residualCauchyBC;
-  ResidualBC[4] = &PDEModelBaseClass::residualNothingBC;
-
-  // default jacobian boundary conditions
-  JacobianBC[0] = &PDEModelBaseClass::jacobianNothingBC;
-  JacobianBC[1] = &PDEModelBaseClass::jacobianNothingBC;
-  JacobianBC[2] = &PDEModelBaseClass::jacobianNothingBC;
-  JacobianBC[3] = &PDEModelBaseClass::jacobianCauchyBC;
-  JacobianBC[4] = &PDEModelBaseClass::jacobianNothingBC;
-
   // default jacobian boundary conditions (mainly for adjoint)
   //accumulateJacobianBC[0] = &PDEModelBaseClass::jacobianNothingBC;
   //accumulateJacobianBC[1] = &PDEModelBaseClass::jacobianNothingBC;
