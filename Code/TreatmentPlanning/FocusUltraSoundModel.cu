@@ -467,4 +467,92 @@ PetscErrorCode ComputeJacobian(SNES snes,Vec x,Mat *J,Mat *B,MatStructure *flag,
   ierr = DMRestoreLocalVector(da,&xlocal);CHKERRQ(ierr);
   return 0;
 }
+//And retrieving the triangle_tuple can be down as: 
+// point_in_bbox from other post 
+ template <typename Tuple>
+ __host__ __device__
+ void operator()(Tuple tuple) 
+ { 
+       // storage for the 8 vertices of this hex element
+       PetscScalar3 PhysicalNodes[8];
+       // decode the first entry of the tuple to get the hex coords
+       Mesh::get_coords(get<0>(tuple),PhysicalNodes); 
+
+       // local residual and solution
+       thrust::device_vector< PetscScalar > &ElementResidual = get<1>(tuple);
+       thrust::device_vector< PetscScalar > &ElementSolution = get<2>(tuple);
+
+       int node_index = get<1>(t); 
+       int& key = get<2>(t); 
+       //... do stuff with paramaters ... 
+          thrust::get<0>(t) = sc * ( source
+                         + m_density*m_specificheat/m_deltat* u_val 
+                         + m_bloodspecificheat*m_perfusion*(m_bodytemp - 0.5*u_val) ) 
+       for (unsigned int qp=0; qp != n_qpoints; qp++)
+         {
+           // Compute the solution & its gradient at the old Newton iterate
+           Number u_theta  = c.interior_value(   this->u_var,qp);
+           Gradient grad_u = c.interior_gradient(this->u_var,qp);
+
+           // get damage values
+           Number  damage  = c.interior_value(   this->a_var,qp);
+           Number DdamageDu= c.interior_value(   this->b_var,qp);
+
+           Gradient DiffusionDirection = this->m_MathModel.DiffusionDirection(subdomain_id) ; 
+           Gradient TempDiffusionDirection( 
+                    grad_u(0)*DiffusionDirection(0)  ,
+                    grad_u(1)*DiffusionDirection(1)  ,
+                    grad_u(2)*DiffusionDirection(2)  
+                                          ); 
+
+           // First, an i-loop over the velocity degrees of freedom.
+           // We know that n_u_dofs == n_v_dofs so we can compute contributions
+           // for both at the same time.
+           for (unsigned int i=0; i != n_u_dofs; i++)
+             {
+               ElementResidual(i) += JxW[qp] * (
+                     phi[i][qp] * 
+                      (              // perfusion term (check the SIGN)
+                       this->m_MathModel.PennesReactionTerm(field_id,u_theta,damage)
+                                -    // source term 
+                       this->m_MathModel.PennesSource(field_id,u_theta,
+                                                      damage,z_value, 
+                                                      qpoint[qp],
+                                                      this->m_PowerID)
+                      )
+                                +    // diffusion term
+                     this->m_MathModel.ThermalConductivity(field_id,u_theta,damage) *
+                                              ( TempDiffusionDirection * dphi[i][qp] )
+             	) ;
+               // convection term
+               Fu(i) += JxW[qp] * phi[i][qp] * 
+                     ( this->m_MathModel.BulkFluidFlow(subdomain_id) * grad_u ) ; 
+             }
+         }
+ } 
+
+PetscErrorCode ComputeFunction(
+  CUSPARRAY      *xcoord,
+  CUSPARRAY      *ycoord,
+  CUSPARRAY      *zcoord,
+  CUSPARRAY      *solution,
+  CUSPARRAY      *residual,
+                              )
+{
+  thrust::for_each( 
+  make_zip_iterator(make_tuple(mesh.begin(),indices.begin(),keys.begin())), 
+  make_zip_iterator(make_tuple(mesh.end(  ),indices.end(  ),keys.end(  ))), 
+         point_in_bbox(nodes,bbox) 
+  ); 
+  // sum values with the same (i,j) index
+  thrust::reduce_by_key(thrust::make_zip_iterator(thrust::make_tuple(I.begin(), J.begin())),
+                        thrust::make_zip_iterator(thrust::make_tuple(I.end(),   J.end())),
+                        V.begin(),
+                        thrust::make_zip_iterator(thrust::make_tuple(A.row_indices.begin(), A.column_indices.begin())),
+                        A.values.begin(),
+                        thrust::equal_to< thrust::tuple<int,int> >(),
+                        thrust::plus<float>());
+    
+  return 0;
+}
 
