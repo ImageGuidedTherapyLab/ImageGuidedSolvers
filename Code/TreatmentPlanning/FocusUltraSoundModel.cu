@@ -7,6 +7,7 @@ static char help[] = "Solves -Laplacian u - exp(u) = 0,  0 < x < 1 using GPU\n\n
 #include <petscsnes.h>
 #include <petsccusp.h>
 #include "cusp/detail/device/utils.h"
+//#include <thrust/sort.h>
 
 extern PetscErrorCode ComputeFunction(SNES,Vec,Vec,void*);
 PetscBool  useCUSP = PETSC_FALSE;
@@ -20,89 +21,114 @@ struct LinearHexMesh
               m_NumElements (numelements)
                {
                   m_NodesPerElement = 8 ; 
-                  element_residuals.resize(numelements*m_NodesPerElement); 
+                  element_residuals->resize(numelements*m_NodesPerElement); 
                }
   // number of elements
   PetscInt m_NumElements;
   // number of nodes per element
   PetscInt m_NodesPerElement  ; 
   // node coordinates
-  CUSPARRAY m_NodeXCoord, m_NodeYCoord, m_NodeZCoord;
+  CUSPARRAY *m_NodeXCoord, *m_NodeYCoord, *m_NodeZCoord;
   // solution and residual
   CUSPARRAY *uarray,*farray;
   // temporary vector to hold element wise residual
   // 8 residual entries per element (one for each node)
-  CUSPARRAY element_residuals;
+  CUSPARRAY *element_residuals;
   // connectivity information is stored per node for structure of array access
-  CUSPINTARRAYGPU  m_Connectivity0,
-                   m_Connectivity1,
-                   m_Connectivity2,
-                   m_Connectivity3,
-                   m_Connectivity4,
-                   m_Connectivity5,
-                   m_Connectivity6,
-                   m_Connectivity7;
-  CUSPINTARRAYGPU  m_GlobalLocalMap0,
-                   m_GlobalLocalMap1,
-                   m_GlobalLocalMap2,
-                   m_GlobalLocalMap3,
-                   m_GlobalLocalMap4,
-                   m_GlobalLocalMap5,
-                   m_GlobalLocalMap6,
-                   m_GlobalLocalMap7;
+  CUSPINTARRAYGPU  *m_Connectivity0,
+                   *m_Connectivity1,
+                   *m_Connectivity2,
+                   *m_Connectivity3,
+                   *m_Connectivity4,
+                   *m_Connectivity5,
+                   *m_Connectivity6,
+                   *m_Connectivity7;
+  CUSPINTARRAYGPU  *m_GlobalLocalMap0,
+                   *m_GlobalLocalMap1,
+                   *m_GlobalLocalMap2,
+                   *m_GlobalLocalMap3,
+                   *m_GlobalLocalMap4,
+                   *m_GlobalLocalMap5,
+                   *m_GlobalLocalMap6,
+                   *m_GlobalLocalMap7;
+  CUSPINTARRAYGPU  *m_LocalElementMap;
   typedef CUSPARRAY::iterator PetscScalarIter;
   typedef CUSPINTARRAYGPU::iterator    PetscIntIter;
   typedef thrust::permutation_iterator<PetscScalarIter,PetscIntIter> PetscMapIter;
-  typedef thrust::zip_iterator<
-            thrust::tuple< PetscMapIter,PetscMapIter,PetscMapIter > > ZipNodeIterator;
-
-  // iterators for looping of nodes within elements
   typedef thrust::zip_iterator< thrust::tuple< 
-     ZipNodeIterator, ZipNodeIterator, ZipNodeIterator, ZipNodeIterator, 
-     ZipNodeIterator, ZipNodeIterator, ZipNodeIterator, ZipNodeIterator 
+     PetscMapIter, PetscMapIter, PetscMapIter, PetscMapIter,
+     PetscMapIter, PetscMapIter, PetscMapIter, PetscMapIter 
                        > > hex_iterator ; 
-  hex_iterator ElementBegin() 
+  // iterators for looping of nodes within elements
+  typedef thrust::zip_iterator<
+            thrust::tuple< hex_iterator, hex_iterator, hex_iterator > > hex_node_iterator;
+  hex_node_iterator ElementBegin() 
   { 
     return thrust::make_zip_iterator(thrust::make_tuple( 
-             thrust::make_zip_iterator(thrust::make_tuple(   // node 0
-               thrust::make_permutation_iterator(m_NodeXCoord.begin(),m_Connectivity0.begin()),
-               thrust::make_permutation_iterator(m_NodeYCoord.begin(),m_Connectivity0.begin()),
-               thrust::make_permutation_iterator(m_NodeZCoord.begin(),m_Connectivity0.begin()) 
+             thrust::make_zip_iterator(thrust::make_tuple(   // x - coordinates 
+               thrust::make_permutation_iterator(m_NodeXCoord->begin(),m_Connectivity0->begin()),
+               thrust::make_permutation_iterator(m_NodeXCoord->begin(),m_Connectivity1->begin()),
+               thrust::make_permutation_iterator(m_NodeXCoord->begin(),m_Connectivity2->begin()),
+               thrust::make_permutation_iterator(m_NodeXCoord->begin(),m_Connectivity3->begin()),
+               thrust::make_permutation_iterator(m_NodeXCoord->begin(),m_Connectivity4->begin()),
+               thrust::make_permutation_iterator(m_NodeXCoord->begin(),m_Connectivity5->begin()),
+               thrust::make_permutation_iterator(m_NodeXCoord->begin(),m_Connectivity6->begin()),
+               thrust::make_permutation_iterator(m_NodeXCoord->begin(),m_Connectivity7->begin()) 
                                                          )),
-             thrust::make_zip_iterator(thrust::make_tuple(   // node 1
-               thrust::make_permutation_iterator(m_NodeXCoord.begin(),m_Connectivity1.begin()),
-               thrust::make_permutation_iterator(m_NodeYCoord.begin(),m_Connectivity1.begin()),
-               thrust::make_permutation_iterator(m_NodeZCoord.begin(),m_Connectivity1.begin()) 
+             thrust::make_zip_iterator(thrust::make_tuple(   // y - coordinates 
+               thrust::make_permutation_iterator(m_NodeYCoord->begin(),m_Connectivity0->begin()),
+               thrust::make_permutation_iterator(m_NodeYCoord->begin(),m_Connectivity1->begin()),
+               thrust::make_permutation_iterator(m_NodeYCoord->begin(),m_Connectivity2->begin()),
+               thrust::make_permutation_iterator(m_NodeYCoord->begin(),m_Connectivity3->begin()),
+               thrust::make_permutation_iterator(m_NodeYCoord->begin(),m_Connectivity4->begin()),
+               thrust::make_permutation_iterator(m_NodeYCoord->begin(),m_Connectivity5->begin()),
+               thrust::make_permutation_iterator(m_NodeYCoord->begin(),m_Connectivity6->begin()),
+               thrust::make_permutation_iterator(m_NodeYCoord->begin(),m_Connectivity7->begin()) 
                                                          )),
-             thrust::make_zip_iterator(thrust::make_tuple(   // node 2
-               thrust::make_permutation_iterator(m_NodeXCoord.begin(),m_Connectivity2.begin()),
-               thrust::make_permutation_iterator(m_NodeYCoord.begin(),m_Connectivity2.begin()),
-               thrust::make_permutation_iterator(m_NodeZCoord.begin(),m_Connectivity2.begin()) 
+             thrust::make_zip_iterator(thrust::make_tuple(   // z - coordinates 
+               thrust::make_permutation_iterator(m_NodeZCoord->begin(),m_Connectivity0->begin()),
+               thrust::make_permutation_iterator(m_NodeZCoord->begin(),m_Connectivity1->begin()),
+               thrust::make_permutation_iterator(m_NodeZCoord->begin(),m_Connectivity2->begin()),
+               thrust::make_permutation_iterator(m_NodeZCoord->begin(),m_Connectivity3->begin()),
+               thrust::make_permutation_iterator(m_NodeZCoord->begin(),m_Connectivity4->begin()),
+               thrust::make_permutation_iterator(m_NodeZCoord->begin(),m_Connectivity5->begin()),
+               thrust::make_permutation_iterator(m_NodeZCoord->begin(),m_Connectivity6->begin()),
+               thrust::make_permutation_iterator(m_NodeZCoord->begin(),m_Connectivity7->begin()) 
+                                                         )) 
+                                                       ));
+  } 
+  hex_node_iterator ElementEnd() 
+  { 
+    return thrust::make_zip_iterator(thrust::make_tuple( 
+             thrust::make_zip_iterator(thrust::make_tuple(   // x - coordinates 
+               thrust::make_permutation_iterator(m_NodeXCoord->end(),m_Connectivity0->end()),
+               thrust::make_permutation_iterator(m_NodeXCoord->end(),m_Connectivity1->end()),
+               thrust::make_permutation_iterator(m_NodeXCoord->end(),m_Connectivity2->end()),
+               thrust::make_permutation_iterator(m_NodeXCoord->end(),m_Connectivity3->end()),
+               thrust::make_permutation_iterator(m_NodeXCoord->end(),m_Connectivity4->end()),
+               thrust::make_permutation_iterator(m_NodeXCoord->end(),m_Connectivity5->end()),
+               thrust::make_permutation_iterator(m_NodeXCoord->end(),m_Connectivity6->end()),
+               thrust::make_permutation_iterator(m_NodeXCoord->end(),m_Connectivity7->end()) 
                                                          )),
-             thrust::make_zip_iterator(thrust::make_tuple(   // node 3
-               thrust::make_permutation_iterator(m_NodeXCoord.begin(),m_Connectivity3.begin()),
-               thrust::make_permutation_iterator(m_NodeYCoord.begin(),m_Connectivity3.begin()),
-               thrust::make_permutation_iterator(m_NodeZCoord.begin(),m_Connectivity3.begin()) 
+             thrust::make_zip_iterator(thrust::make_tuple(   // y - coordinates 
+               thrust::make_permutation_iterator(m_NodeYCoord->end(),m_Connectivity0->end()),
+               thrust::make_permutation_iterator(m_NodeYCoord->end(),m_Connectivity1->end()),
+               thrust::make_permutation_iterator(m_NodeYCoord->end(),m_Connectivity2->end()),
+               thrust::make_permutation_iterator(m_NodeYCoord->end(),m_Connectivity3->end()),
+               thrust::make_permutation_iterator(m_NodeYCoord->end(),m_Connectivity4->end()),
+               thrust::make_permutation_iterator(m_NodeYCoord->end(),m_Connectivity5->end()),
+               thrust::make_permutation_iterator(m_NodeYCoord->end(),m_Connectivity6->end()),
+               thrust::make_permutation_iterator(m_NodeYCoord->end(),m_Connectivity7->end()) 
                                                          )),
-             thrust::make_zip_iterator(thrust::make_tuple(   // node 4
-               thrust::make_permutation_iterator(m_NodeXCoord.begin(),m_Connectivity4.begin()),
-               thrust::make_permutation_iterator(m_NodeYCoord.begin(),m_Connectivity4.begin()),
-               thrust::make_permutation_iterator(m_NodeZCoord.begin(),m_Connectivity4.begin()) 
-                                                         )),
-             thrust::make_zip_iterator(thrust::make_tuple(   // node 5
-               thrust::make_permutation_iterator(m_NodeXCoord.begin(),m_Connectivity5.begin()),
-               thrust::make_permutation_iterator(m_NodeYCoord.begin(),m_Connectivity5.begin()),
-               thrust::make_permutation_iterator(m_NodeZCoord.begin(),m_Connectivity5.begin()) 
-                                                         )),
-             thrust::make_zip_iterator(thrust::make_tuple(   // node 6
-               thrust::make_permutation_iterator(m_NodeXCoord.begin(),m_Connectivity6.begin()),
-               thrust::make_permutation_iterator(m_NodeYCoord.begin(),m_Connectivity6.begin()),
-               thrust::make_permutation_iterator(m_NodeZCoord.begin(),m_Connectivity6.begin()) 
-                                                         )),
-             thrust::make_zip_iterator(thrust::make_tuple(   // node 7
-               thrust::make_permutation_iterator(m_NodeXCoord.begin(),m_Connectivity7.begin()),
-               thrust::make_permutation_iterator(m_NodeYCoord.begin(),m_Connectivity7.begin()),
-               thrust::make_permutation_iterator(m_NodeZCoord.begin(),m_Connectivity7.begin()) 
+             thrust::make_zip_iterator(thrust::make_tuple(   // z - coordinates 
+               thrust::make_permutation_iterator(m_NodeZCoord->end(),m_Connectivity0->end()),
+               thrust::make_permutation_iterator(m_NodeZCoord->end(),m_Connectivity1->end()),
+               thrust::make_permutation_iterator(m_NodeZCoord->end(),m_Connectivity2->end()),
+               thrust::make_permutation_iterator(m_NodeZCoord->end(),m_Connectivity3->end()),
+               thrust::make_permutation_iterator(m_NodeZCoord->end(),m_Connectivity4->end()),
+               thrust::make_permutation_iterator(m_NodeZCoord->end(),m_Connectivity5->end()),
+               thrust::make_permutation_iterator(m_NodeZCoord->end(),m_Connectivity6->end()),
+               thrust::make_permutation_iterator(m_NodeZCoord->end(),m_Connectivity7->end()) 
                                                          )) 
                                                        ));
   } 
@@ -114,43 +140,77 @@ struct LinearHexMesh
   residual_iterator ResidualBegin() 
   { 
     return thrust::make_zip_iterator(thrust::make_tuple( 
-                                   element_residuals.begin()+0,
-                                   element_residuals.begin()+1,
-                                   element_residuals.begin()+2,
-                                   element_residuals.begin()+3,
-                                   element_residuals.begin()+4,
-                                   element_residuals.begin()+5,
-                                   element_residuals.begin()+6,
-                                   element_residuals.begin()+7
+                                   element_residuals->begin()+0,
+                                   element_residuals->begin()+1,
+                                   element_residuals->begin()+2,
+                                   element_residuals->begin()+3,
+                                   element_residuals->begin()+4,
+                                   element_residuals->begin()+5,
+                                   element_residuals->begin()+6,
+                                   element_residuals->begin()+7
+                                                       ));
+  } 
+  residual_iterator ResidualEnd() 
+  { 
+    return thrust::make_zip_iterator(thrust::make_tuple( 
+                                   element_residuals->end()+0,
+                                   element_residuals->end()+1,
+                                   element_residuals->end()+2,
+                                   element_residuals->end()+3,
+                                   element_residuals->end()+4,
+                                   element_residuals->end()+5,
+                                   element_residuals->end()+6,
+                                   element_residuals->end()+7
                                                        ));
   } 
 
   // iterators for looping over element solution vector for each element
-  typedef thrust::zip_iterator< thrust::tuple< 
-     PetscMapIter, PetscMapIter, PetscMapIter, PetscMapIter,
-     PetscMapIter, PetscMapIter, PetscMapIter, PetscMapIter 
-                       > > solution_iterator ; 
-  solution_iterator SolutionBegin() 
+  hex_iterator SolutionBegin() 
   {
     return thrust::make_zip_iterator(thrust::make_tuple( 
-          thrust::make_permutation_iterator(uarray->begin(),m_GlobalLocalMap0.begin()),
-          thrust::make_permutation_iterator(uarray->begin(),m_GlobalLocalMap1.begin()),
-          thrust::make_permutation_iterator(uarray->begin(),m_GlobalLocalMap2.begin()),
-          thrust::make_permutation_iterator(uarray->begin(),m_GlobalLocalMap3.begin()),
-          thrust::make_permutation_iterator(uarray->begin(),m_GlobalLocalMap4.begin()),
-          thrust::make_permutation_iterator(uarray->begin(),m_GlobalLocalMap5.begin()),
-          thrust::make_permutation_iterator(uarray->begin(),m_GlobalLocalMap6.begin()),
-          thrust::make_permutation_iterator(uarray->begin(),m_GlobalLocalMap7.begin())
+          thrust::make_permutation_iterator(uarray->begin(),m_GlobalLocalMap0->begin()),
+          thrust::make_permutation_iterator(uarray->begin(),m_GlobalLocalMap1->begin()),
+          thrust::make_permutation_iterator(uarray->begin(),m_GlobalLocalMap2->begin()),
+          thrust::make_permutation_iterator(uarray->begin(),m_GlobalLocalMap3->begin()),
+          thrust::make_permutation_iterator(uarray->begin(),m_GlobalLocalMap4->begin()),
+          thrust::make_permutation_iterator(uarray->begin(),m_GlobalLocalMap5->begin()),
+          thrust::make_permutation_iterator(uarray->begin(),m_GlobalLocalMap6->begin()),
+          thrust::make_permutation_iterator(uarray->begin(),m_GlobalLocalMap7->begin())
+                                                       ));
+  }
+  hex_iterator SolutionEnd() 
+  {
+    return thrust::make_zip_iterator(thrust::make_tuple( 
+          thrust::make_permutation_iterator(uarray->end(),m_GlobalLocalMap0->end()),
+          thrust::make_permutation_iterator(uarray->end(),m_GlobalLocalMap1->end()),
+          thrust::make_permutation_iterator(uarray->end(),m_GlobalLocalMap2->end()),
+          thrust::make_permutation_iterator(uarray->end(),m_GlobalLocalMap3->end()),
+          thrust::make_permutation_iterator(uarray->end(),m_GlobalLocalMap4->end()),
+          thrust::make_permutation_iterator(uarray->end(),m_GlobalLocalMap5->end()),
+          thrust::make_permutation_iterator(uarray->end(),m_GlobalLocalMap6->end()),
+          thrust::make_permutation_iterator(uarray->end(),m_GlobalLocalMap7->end())
                                                        ));
   }
 
-  // // helper to get points p,q,r from triangle_tuple 
-  // void get_pqr(triangle_tuple const & t, float3 & p, float3 & q, float3 & r) 
-  // { 
-  //        p = thrust::make_float3(get<0>(t),get<1>(t),get<2>(t)); 
-  //        q = thrust::make_float3(get<3>(t),get<4>(t),get<5>(t)); 
-  //        r = thrust::make_float3(get<6>(t),get<7>(t),get<8>(t)); 
-  // } 
+  typedef thrust::tuple< 
+     PetscScalar,PetscScalar,PetscScalar,PetscScalar,
+     PetscScalar,PetscScalar,PetscScalar,PetscScalar
+  > hex_tuple; 
+  // helper to get array/vector from hex tuple
+  __host__ __device__
+  void get_hex_vector(hex_tuple const &tuple, PetscScalar elemvector[8]) 
+  { 
+        // decode the tuple
+        elemvector[0]=    thrust::get<0>(tuple) ;
+        elemvector[1]=    thrust::get<1>(tuple) ;
+        elemvector[2]=    thrust::get<2>(tuple) ;
+        elemvector[3]=    thrust::get<3>(tuple) ;
+        elemvector[4]=    thrust::get<4>(tuple) ;
+        elemvector[5]=    thrust::get<5>(tuple) ;
+        elemvector[6]=    thrust::get<6>(tuple) ;
+        elemvector[7]=    thrust::get<7>(tuple) ;
+        return;
+  } 
 };
 // https://groups.google.com/forum/?fromgroups=#!topic/thrust-users/mqYDi2X7xmA
 //
@@ -173,12 +233,12 @@ struct WFSModel : public LinearHexMesh
   PetscScalar    m_density           ;
   PetscScalar    m_specificheat      ;
   PetscScalar    m_deltat            ;
-  PetscScalar    m_conduction        ;
   PetscScalar    m_bloodspecificheat ;
-  PetscScalar    m_perfusion         ;
   PetscScalar    m_bodytemp          ;
-  PetscScalar    m_absorption        ;
-  PetscScalar    m_scattering        ;
+  CUSPARRAY      *m_conduction       ;
+  CUSPARRAY      *m_perfusion        ;
+  CUSPARRAY      *m_absorption       ;
+  CUSPARRAY      *m_scattering       ;
   
   WFSModel(PetscInt rank, PetscInt deviceNum,PetscInt numelements ) : 
              LinearHexMesh(numelements) ,
@@ -187,37 +247,60 @@ struct WFSModel : public LinearHexMesh
                   m_density           = 1.e3;
                   m_specificheat      = 3.8e3;
                   m_deltat            = 1.00;
-                  m_conduction        = 0.57;
                   m_bloodspecificheat = 3.4e3;
-                  m_perfusion         =  6.0;
                   m_bodytemp          = 37.0;
                   m_x0          = 0.005;
                   m_y0          = 0.005;
                   m_z0          = 0.005;
                }
-  //And retrieving the triangle_tuple can be down as: 
+  // iterators for looping over element solution vector for each element
+  typedef thrust::zip_iterator< thrust::tuple< 
+     PetscScalarIter, PetscScalarIter, PetscScalarIter, PetscScalarIter
+                       > > constitutive_iterator ; 
+  constitutive_iterator ConstitutiveBegin() 
+  {
+    return thrust::make_zip_iterator(thrust::make_tuple( 
+                     m_perfusion ->begin(),//0  perfusion
+                     m_conduction->begin(),//1  conduction
+                     m_scattering->begin(),//2  scattering
+                     m_absorption->begin() //3  absorption
+                                                       ));
+  }
+  constitutive_iterator ConstitutiveEnd() 
+  {
+    return thrust::make_zip_iterator(thrust::make_tuple( 
+                     m_perfusion ->end(),//0  perfusion
+                     m_conduction->end(),//1  conduction
+                     m_scattering->end(),//2  scattering
+                     m_absorption->end() //3  absorption
+                                                       ));
+  }
   // point_in_bbox from other post 
   template <typename Tuple>
   __host__ __device__
   void operator()(Tuple tuple) 
   { 
-        // // storage for the 8 vertices of this hex element
-        PetscScalar Node0Xcoord  = thrust::get<0>(thrust::get<0>(thrust::get<0>(tuple))) ;
-        PetscScalar Node0Ycoord  = thrust::get<0>(thrust::get<0>(thrust::get<1>(tuple))) ;
-        PetscScalar Node0Zcoord  = thrust::get<0>(thrust::get<0>(thrust::get<2>(tuple))) ;
-        // // decode the first entry of the tuple to get the hex coords
-        // Mesh::get_coords(get<0>(tuple),PhysicalNodes); 
+        // decode the hex node coordinates
+        PetscScalar NodeXcoord[8], NodeYcoord[8], NodeZcoord[8] ;
+        this->get_hex_vector(thrust::get<0>(thrust::get<0>(tuple)), NodeXcoord); 
+        this->get_hex_vector(thrust::get<1>(thrust::get<0>(tuple)), NodeYcoord); 
+        this->get_hex_vector(thrust::get<2>(thrust::get<0>(tuple)), NodeZcoord); 
   
-        // local residual and solution
-        PetscScalar ElementResidual = thrust::get<1>(thrust::get<0>(tuple));
-        PetscScalar ElementSolution = thrust::get<2>(thrust::get<0>(tuple));
+        // decode local residual and solution
+        PetscScalar ElementResidual[8], ElementSolution[8];
+        this->get_hex_vector(thrust::get<1>(tuple), ElementResidual); 
+        this->get_hex_vector(thrust::get<2>(tuple), ElementSolution); 
   
-        // consitutitve data
-        //Mesh::get_consitutitve_data(get<3>(tuple),m_perfusion,m_conduction,m_absorption,m_scattering); 
+        // decode constitutive data
+        PetscScalar Perfusion    = thrust::get<0>(thrust::get<3>(tuple));
+        PetscScalar Conduction   = thrust::get<1>(thrust::get<3>(tuple));
+        PetscScalar Absorption   = thrust::get<2>(thrust::get<3>(tuple));
+        PetscScalar Scattering   = thrust::get<3>(thrust::get<3>(tuple));
   
         printf("rank=%d device=%d blockDim=(%d,%d,%d) gridDim=(%d,%d,%d) warpSize=%d blockIdx=(%d,%d,%d) threadIdx=(%d,%d,%d) node0=(%f,%f,%f) residual0=%f solution0=%f absorption=%f conduction=%f\n",m_rank,m_deviceNum,blockDim.x, blockDim.y, blockDim.z, gridDim.x, gridDim.y, gridDim.z, warpSize,blockIdx.x,blockIdx.y,blockIdx.z,threadIdx.x,threadIdx.y,threadIdx.z,
-                  Node0Xcoord,Node0Ycoord,Node0Zcoord,
-                  ElementResidual,ElementSolution,m_absorption,m_conduction);
+                  NodeXcoord[0],NodeYcoord[0],NodeZcoord[0],
+                  ElementResidual[0],ElementSolution[0],
+                  Absorption     ,Conduction   );
         // //... do stuff with paramaters ... 
         //    thrust::get<0>(t) = sc * ( source
         //                   + m_density*m_specificheat/m_deltat* u_val 
@@ -680,24 +763,40 @@ PetscErrorCode ComputeFunction(SNES snes,Vec u,Vec f,void *ctx)
   // loop over elements
   // ensure thread safety by each thread writing to its own local residual
   // ie similar to DG methods
-  // thrust::for_each( 
-  // make_zip_iterator(make_tuple(FemModel.ElementBegin(),
-  //                              FemModel.ResidualBegin(),
-  //                              FemModel.SolutionBegin(), 
-  //                              FemModel.ConstitutiveBegin()
-  //                             )), 
-  // make_zip_iterator(make_tuple(mesh.end(  ),HexResidualEnd   ,HexSolutionEnd  , ConstitutiveData.end(  ))), 
-  //        point_in_bbox(nodes,bbox) 
-  // ); 
-  // // Reduce the expanded residual to the usual continuous additive contributions
-  // thrust::reduce_by_key(thrust::make_zip_iterator(thrust::make_tuple(I.begin(), J.begin())),
-  //                       thrust::make_zip_iterator(thrust::make_tuple(I.end(),   J.end())),
-  //                       V.begin(),
-  //                       thrust::make_zip_iterator(thrust::make_tuple(A.row_indices.begin(), A.column_indices.begin())),
-  //                       A.values.begin(),
-  //                       thrust::equal_to< thrust::tuple<int,int> >(),
-  //                       thrust::plus<float>());
-  //   
+  thrust::for_each( 
+     thrust::make_zip_iterator(thrust::make_tuple(
+                               FemModel->ElementBegin(),
+                               FemModel->ResidualBegin(),
+                               FemModel->SolutionBegin(), 
+                               FemModel->ConstitutiveBegin()
+                              )), 
+     thrust::make_zip_iterator(thrust::make_tuple(
+                               FemModel->ElementEnd(),
+                               FemModel->ResidualEnd(),
+                               FemModel->SolutionEnd(), 
+                               FemModel->ConstitutiveEnd()
+                              )), 
+     *FemModel // call the overloaded operator() from this class
+                  ); 
+  // Reduce the expanded residual to the usual 
+  // continuous additive contributions
+  // first need to sort
+  typedef CUSPARRAY::iterator PetscScalarIter;
+  typedef CUSPINTARRAYGPU::iterator    PetscIntIter;
+  //thrust::sort_by_key<PetscIntIter,PetscScalarIter>(
+  //                           FemModel->m_LocalElementMap->begin(),
+  //                           FemModel->m_LocalElementMap->end(),
+  //                           FemModel->element_residuals->begin()
+  //                          );
+  // reduce the sorted array
+  thrust::reduce_by_key(
+                        FemModel->m_LocalElementMap->begin(),
+                        FemModel->m_LocalElementMap->end(),
+                        FemModel->element_residuals->begin(),
+                        thrust::make_discard_iterator(),
+                        FemModel->farray->begin()
+                       );
+     
   return 0;
 }
 
