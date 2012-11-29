@@ -3,11 +3,18 @@ static char help[] = "Solves -Laplacian u - exp(u) = 0,  0 < x < 1 using GPU\n\n
    Same as ex47.c except it also uses the GPU to evaluate the function
 */
 
+// TODO: CAUTION sort header needs to be first or getting compile errors??
+// TODO: CAUTION sort header needs to be first or getting compile errors??
+// TODO: CAUTION sort header needs to be first or getting compile errors??
+#include <thrust/sort.h>
+
+// petsc includes
 #include <petscdmda.h>
 #include <petscsnes.h>
 #include <petsccusp.h>
+
+// cusp includes
 #include "cusp/detail/device/utils.h"
-//#include <thrust/sort.h>
 
 extern PetscErrorCode ComputeFunction(SNES,Vec,Vec,void*);
 PetscBool  useCUSP = PETSC_FALSE;
@@ -756,7 +763,7 @@ PetscErrorCode ComputeFunction(SNES snes,Vec u,Vec f,void *ctx)
   // get solution array for reading
   // FIXME: will not work for mpi distributed array
   // TODO:  fix for MPI
-  ierr = VecCUSPGetArrayRead(u,&FemModel->uarray);CHKERRQ(ierr);
+  ierr = VecCUSPGetArrayRead( u,&FemModel->uarray);CHKERRQ(ierr);
   // get residual array for writing
   ierr = VecCUSPGetArrayWrite(f,&FemModel->farray);CHKERRQ(ierr);
 
@@ -781,13 +788,11 @@ PetscErrorCode ComputeFunction(SNES snes,Vec u,Vec f,void *ctx)
   // Reduce the expanded residual to the usual 
   // continuous additive contributions
   // first need to sort
-  typedef CUSPARRAY::iterator PetscScalarIter;
-  typedef CUSPINTARRAYGPU::iterator    PetscIntIter;
-  //thrust::sort_by_key<PetscIntIter,PetscScalarIter>(
-  //                           FemModel->m_LocalElementMap->begin(),
-  //                           FemModel->m_LocalElementMap->end(),
-  //                           FemModel->element_residuals->begin()
-  //                          );
+  thrust::sort_by_key(
+                       FemModel->m_LocalElementMap->begin(),
+                       FemModel->m_LocalElementMap->end(),
+                       FemModel->element_residuals->begin()
+                     );
   // reduce the sorted array
   thrust::reduce_by_key(
                         FemModel->m_LocalElementMap->begin(),
@@ -797,6 +802,9 @@ PetscErrorCode ComputeFunction(SNES snes,Vec u,Vec f,void *ctx)
                         FemModel->farray->begin()
                        );
      
+  // restore arrays
+  ierr = VecCUSPRestoreArrayRead( u,&FemModel->uarray);CHKERRQ(ierr);
+  ierr = VecCUSPRestoreArrayWrite(f,&FemModel->farray);CHKERRQ(ierr);
   return 0;
 }
 
